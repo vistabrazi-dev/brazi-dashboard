@@ -1,0 +1,38 @@
+# Preparação declarativa. Aplicar este Blueprint pode criar recursos pagos e iniciar o primeiro deploy.
+services:
+  - type: web
+    name: brazi-dashboard
+    runtime: node
+    plan: starter
+    numInstances: 1
+    autoDeploy: false
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: brazi-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATABASE_PATH
+        value: /var/data/brazi/brazi.sqlite
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: AUTH_USERNAME
+        sync: false
+      - key: AUTH_PASSWORD_HASH
+        sync: false
+      - key: RESERVA_INK_TOKEN
+        sync: false
+      - key: BUSINESS_TIMEZONE
+        value: America/Sao_Paulo
+      - key: API_PAUSE_MS
+        value: "1800"
+      - key: SYNC_MAX_PAGES
+        value: "1000"
+# PORT e RENDER_EXTERNAL_URL são fornecidas pelo Render em runtime.
+# Para domínio próprio, configure APP_ORIGIN=https://seu-dominio no painel (sem barra/caminho).
