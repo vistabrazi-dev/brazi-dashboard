@@ -5,6 +5,14 @@ export class StartupFailure extends Error {
 }
 const stages:Record<StartupStage,string>={runtime:'runtime',configuration:'configuração', 'database-connect':'conexão PostgreSQL','database-migrations':'migrações PostgreSQL',application:'preparação HTTP','http-listen':'abertura da porta HTTP'};
 const reasons:Record<string,string>={
+ DB_URL_PORT:'Porta inválida em DATABASE_URL. Use a porta exibida em Connect; Session Pooler normalmente usa 5432.',
+ DB_URL_WHITESPACE:'DATABASE_URL contém espaços externos ou quebras de linha. Cole somente a URI, sem aspas ou prefixo DATABASE_URL=.',
+ DB_URL_ENCODING:'Codificação percentual inválida em DATABASE_URL. Codifique usuário/senha uma única vez, sem alterar o valor original.',
+ DB_PG_OPTIONS_CONFLICT:'Remova PGOPTIONS e PGREPLICATION: esses ajustes de sessão não são suportados nesta aplicação.',
+ DB_POOLER_USER:'Session Pooler exige o usuário completo exibido em Connect, normalmente postgres.<project-ref>; não use apenas postgres retornado pelo SQL Editor.',
+ DB_URL_PASSWORD_MISSING:'Senha ausente em DATABASE_URL. Use a senha do banco Supabase; PGPASSWORD não é usado como substituto.',
+ DB_URL_PLACEHOLDER:'Possível placeholder na conexão do pooler. Substitua os marcadores pela credencial do banco no painel privado.',
+
  ENOTFOUND:'DNS do banco não resolvido. Confira o hostname do Session Pooler.',EAI_AGAIN:'DNS indisponível temporariamente. Confira a rede e tente novamente.',
  ECONNREFUSED:'Conexão recusada. Confira o pooler, a porta e o estado do projeto Supabase.',ECONNRESET:'Conexão interrompida. Confira a rede e o estado do pooler.',ETIMEDOUT:'Tempo de conexão esgotado. Confira rede, restrições de acesso e suspensão do Supabase.',ENETUNREACH:'Rede do banco inacessível. Prefira o Session Pooler compatível com IPv4.',EHOSTUNREACH:'Host do banco inacessível. Confira a conectividade ao Session Pooler.',EPIPE:'Conexão com o banco interrompida.',
  DEPTH_ZERO_SELF_SIGNED_CERT:'Certificado TLS não confiável. Configure a CA oficial em DATABASE_CA_CERT; não desative a verificação.',SELF_SIGNED_CERT_IN_CHAIN:'Cadeia TLS não confiável. Configure a CA oficial em DATABASE_CA_CERT; não desative a verificação.',UNABLE_TO_VERIFY_LEAF_SIGNATURE:'Não foi possível verificar a cadeia TLS. Confira a CA oficial do banco.',UNABLE_TO_GET_ISSUER_CERT_LOCALLY:'CA emissora não reconhecida. Confira DATABASE_CA_CERT.',CERT_HAS_EXPIRED:'Certificado TLS expirado. Confira a cadeia oficial do banco.',ERR_TLS_CERT_ALTNAME_INVALID:'Certificado TLS não corresponde ao hostname. Use o endereço exato do pooler.',

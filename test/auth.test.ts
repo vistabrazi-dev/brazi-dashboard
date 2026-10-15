@@ -23,9 +23,9 @@ test('hash salgado usa scrypt, verifica senha e não aceita hash/senha inválido
 });
 test('produção fecha sem credenciais, origem HTTPS ou conexão segura e respeita PORT',async()=>{
  const hash=await passwordHash(randomBytes(24).toString('hex'));
- const valid={NODE_ENV:'production',AUTH_USERNAME:'test-user',AUTH_PASSWORD_HASH:hash,APP_ORIGIN:origin,DATABASE_URL:'postgresql://user@db.example/brazi?sslmode=verify-full',PORT:'10000'};
+ const valid={NODE_ENV:'production',AUTH_USERNAME:'test-user',AUTH_PASSWORD_HASH:hash,APP_ORIGIN:origin,DATABASE_URL:'postgresql://user:synthetic-pass@db.example/brazi?sslmode=verify-full',PORT:'10000'};
  const config=settings(valid);assert.equal(config.PORT,10000);assert.equal(config.host,'0.0.0.0');assert.equal(config.auth.enabled,true);
- for(const patch of [{AUTH_ENABLED:'false'},{AUTH_PASSWORD_HASH:''},{AUTH_USERNAME:''},{APP_ORIGIN:'http://example.com'},{APP_ORIGIN:origin+'/path'},{DATABASE_URL:'postgresql://user@db.example/brazi?sslmode=disable'},{APP_ORIGIN:undefined}])assert.throws(()=>settings({...valid,...patch}));
+ for(const patch of [{AUTH_ENABLED:'false'},{AUTH_PASSWORD_HASH:''},{AUTH_USERNAME:''},{APP_ORIGIN:'http://example.com'},{APP_ORIGIN:origin+'/path'},{DATABASE_URL:'postgresql://user:synthetic-pass@db.example/brazi?sslmode=disable'},{APP_ORIGIN:undefined}])assert.throws(()=>settings({...valid,...patch}));
  assert.equal(settings({...valid,APP_ORIGIN:undefined,RENDER_EXTERNAL_URL:origin}).auth.origin,origin);
  assert.equal(settings({...valid,RENDER:'true'}).DATABASE_POOL_MAX,3);
 });

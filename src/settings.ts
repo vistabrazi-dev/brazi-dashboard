@@ -3,6 +3,7 @@ import {config as loadEnvironment} from 'dotenv';
 if(process.env.NODE_ENV!=='production')loadEnvironment();
 import {schemaName} from './storage/migrate.js';
 import {connectionOptions} from './storage/connection.js';
+import {DatabaseConfigurationError} from './storage/database-diagnostics.js';
 import {z} from 'zod';
 import {validPasswordHash} from './auth/password.js';
 export class ConfigurationError extends Error {}
@@ -35,7 +36,7 @@ export function settings(environment:NodeJS.ProcessEnv=process.env){
  if(sourceOrigin){try{const url=new URL(sourceOrigin);if(url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw new ConfigurationError();if(production?url.protocol!=='https:':!['http:','https:'].includes(url.protocol))throw new ConfigurationError();origin=url.origin;}catch{throw new ConfigurationError('APP_ORIGIN deve ser uma origem válida, HTTPS em produção.');}}
  if(production&&(!enabled||!origin))throw new ConfigurationError('Produção exige autenticação e APP_ORIGIN ou RENDER_EXTERNAL_URL HTTPS.');
  if(enabled&&(!config.AUTH_USERNAME||!config.AUTH_PASSWORD_HASH||!validPasswordHash(config.AUTH_PASSWORD_HASH)))throw new ConfigurationError('Configure AUTH_USERNAME e AUTH_PASSWORD_HASH válidos.');
- try{schemaName(config.DATABASE_SCHEMA);connectionOptions(config.DATABASE_URL,{production,max:config.DATABASE_POOL_MAX,ca:config.DATABASE_CA_CERT});}catch{throw new ConfigurationError('DATABASE_URL inválida ou TLS inseguro. Confira a conexão PostgreSQL.');}
+ try{schemaName(config.DATABASE_SCHEMA);connectionOptions(config.DATABASE_URL,{production,max:config.DATABASE_POOL_MAX,ca:config.DATABASE_CA_CERT});}catch(error){if(error instanceof DatabaseConfigurationError)throw error;throw new ConfigurationError('DATABASE_URL inválida ou TLS inseguro. Confira a conexão PostgreSQL.');}
  if(config.RENDER==='true'&&!production)throw new ConfigurationError('Render exige NODE_ENV=production.');
  try{new Intl.DateTimeFormat('pt-BR',{timeZone:config.BUSINESS_TIMEZONE});}catch{throw new ConfigurationError('BUSINESS_TIMEZONE inválido. Use um identificador de fuso IANA.');}
  if(config.DISPLAY_CURRENCY)try{new Intl.NumberFormat('pt-BR',{style:'currency',currency:config.DISPLAY_CURRENCY});}catch{throw new ConfigurationError('DISPLAY_CURRENCY inválida. Confira o código de moeda.');}

@@ -149,3 +149,20 @@ Exemplo seguro:
 | abertura da porta HTTP / EADDRINUSE ou EACCES | PORT do Render e conflito de processos |
 
 A mensagem genérica das versões anteriores não permite concluir qual dessas causas ocorreu. A nova saída identifica a etapa efetivamente alcançada. Falha continua encerrando o processo com código não zero, sem desabilitar TLS ou autenticação. Conexões são fechadas quando a preparação HTTP ou abertura da porta falha. Migrações continuam transacionais e não iniciam sincronização da INK.
+
+### SQL Editor funciona, mas o Render recebe 28P01
+
+`SELECT current_user, current_database()` no SQL Editor retornar postgres/postgres identifica somente a sessão interna do editor. Não testa senha de DATABASE_URL, autenticação externa ou o roteamento do Session Pooler. O pooler normalmente exige `postgres.<project-ref>` como usuário, mesmo quando o SQL Editor mostra somente postgres. Copie sempre o usuário exato do painel Connect → Session pooler, mantendo-o no projeto e endpoint corretos.
+
+28P01 significa que o destino respondeu e recusou a autenticação; por si só não distingue senha errada de combinação incorreta de usuário/projeto. Não é motivo para desabilitar TLS nem alterar permissões de tabelas. Confira privadamente no Render:
+
+1. DATABASE_URL é a URI completa do **Session pooler** do projeto correto (porta 5432), não a conexão direta, a URL HTTPS da API ou o Transaction pooler.
+2. O usuário é o exibido em Connect, incluindo o sufixo do projeto quando aplicável. O resultado do SQL Editor não substitui esse usuário.
+3. A senha é a **senha do banco do projeto**, não senha da conta Supabase, senha do dashboard, AUTH_PASSWORD_HASH, chave anon ou service_role. Se ela foi redefinida, atualize DATABASE_URL no Render e aplique a alteração para que o processo receba o valor novo.
+4. Codifique apenas os componentes de usuário/senha para URL, uma única vez. `%`, `@`, `:`, `/`, `?`, `#`, `+`, espaços e Unicode devem manter o valor original após uma decodificação. Não codifique a URI inteira nem substitua uma senha literal por um hash. Não cole aspas, prefixo `DATABASE_URL=`, marcadores de exemplo ou quebras de linha no campo de valor do Render.
+5. Confira o valor efetivo no serviço e nos Environment Groups: este código recebe somente uma DATABASE_URL do processo e não consegue descobrir em qual nível do painel ela foi definida. Credenciais deste ambiente ou do GitHub não atualizam o Render automaticamente.
+6. Remova variáveis PG* redundantes. Host, porta, usuário, senha, banco, TLS e negociação TLS são definidos explicitamente pela aplicação. PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE, PGSSLMODE e PGSSLNEGOTIATION não substituem os campos da URL; PGOPTIONS e PGREPLICATION são recusadas para evitar ajustes de sessão implícitos.
+
+A conexão agora é analisada uma única vez pela aplicação, que passa campos explícitos ao driver, incluindo porta padrão 5432 e um fornecedor de senha que não usa PGPASSWORD/pgpass como fallback. Senha ausente em produção/pooler é erro de configuração. Não há segunda análise por pg-connection-string que possa recodificar uma senha.
+
+Quando o startup falha na configuração ou conexão, a linha `[Brazi database]` informa apenas categorias: fonte, tipo de endpoint, Session/Transaction, formato do usuário, presença de senha e nomes fixos das variáveis PG* presentes. Não informa usuário real, referência do projeto, senha, tamanho, hash, URL ou hostname real. Um formato aparentemente correto não comprova que a senha está certa ou que o projeto corresponde ao endpoint. Esses fatos continuam exigindo teste real com as credenciais corretas.

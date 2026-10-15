@@ -9,10 +9,10 @@ import {dashboard} from '../src/domain/metrics.js';
 import type {Snapshot,Order} from '../src/domain/models.js';
 const order:Order={id:1,day:'2026-10-01',payment:'Pago',status:'delivered',exchange:false,total:10001,shipping:100,freightDifference:1,promotion:97,paymentDiscount:2,items:[{sku:'A',sourceProductId:1,quantity:1,free:0,refunded:0,unit:10000,total:10000}],issues:[]};
 test('TLS remoto e produção verificam certificado; URL não pode sobrescrever opções de segurança',()=>{
- const remote=connectionOptions('postgresql://user@db.example/brazi?sslmode=require',{production:true});assert.deepEqual(remote.ssl,{rejectUnauthorized:true});assert.equal(remote.max,3);assert.doesNotMatch(remote.connectionString!,/sslmode/);
- assert.deepEqual(connectionOptions('postgresql://user@db.example/brazi',{ca:'test-ca'}).ssl,{rejectUnauthorized:true,ca:'test-ca'});
+ const remote=connectionOptions('postgresql://user:synthetic-pass@db.example/brazi?sslmode=require',{production:true});assert.deepEqual(remote.ssl,{rejectUnauthorized:true});assert.equal(remote.max,3);assert.equal(remote.connectionString,undefined);assert.equal(remote.port,5432);
+ assert.deepEqual(connectionOptions('postgresql://user:synthetic-pass@db.example/brazi',{ca:'test-ca'}).ssl,{rejectUnauthorized:true,ca:'test-ca'});
  assert.equal(connectionOptions('postgresql://user@127.0.0.1/brazi?sslmode=disable').ssl,false);
- for(const url of ['http://db.example/brazi','postgresql://user@db.example/brazi?sslmode=disable','postgresql://user@db.example/brazi?sslmode=no-verify','postgresql://user@db.example/brazi?sslcert=ignored','postgresql://user@db.example/brazi?options=unsafe'])assert.throws(()=>connectionOptions(url));
+ for(const url of ['http://db.example/brazi','postgresql://user:synthetic-pass@db.example/brazi?sslmode=disable','postgresql://user:synthetic-pass@db.example/brazi?sslmode=no-verify','postgresql://user:synthetic-pass@db.example/brazi?sslcert=ignored','postgresql://user:synthetic-pass@db.example/brazi?options=unsafe'])assert.throws(()=>connectionOptions(url));
  assert.throws(()=>connectionOptions('postgresql://user@127.0.0.1/brazi?sslmode=disable',{production:true}));
 });
 test('migrações idempotentes concorrentes, schema privado e RLS nos dados e sessões',async()=>{

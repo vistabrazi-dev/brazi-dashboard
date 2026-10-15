@@ -1,3 +1,4 @@
+import {databaseDiagnostics} from './storage/database-diagnostics.js';
 import {settings,ConfigurationError} from './settings.js';
 import {configureProxy} from './integration/transport.js';
 import {Store} from './storage/store.js';
@@ -20,6 +21,7 @@ try{
  for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{void app.close();});
 }catch(error){
  console.error(startupDiagnostic(error,stage));
+ if(stage==='configuration'||stage==='database-connect')console.error(databaseDiagnostics(process.env.DATABASE_URL));
  // ConfigurationError contém somente textos estáticos criados pelo backend.
  if(error instanceof ConfigurationError)console.error(error.message);
  try{if(closeApplication)await closeApplication();else await store?.close();}catch{/* Nenhum erro de limpeza é serializado. */}
