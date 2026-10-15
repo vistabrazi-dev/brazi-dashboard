@@ -27,7 +27,7 @@ const schema=z.object({
 });
 export function settings(environment:NodeJS.ProcessEnv=process.env){
  const clean={...environment};for(const key of ['RESERVA_INK_TOKEN','DISPLAY_CURRENCY','AUTH_USERNAME','AUTH_PASSWORD_HASH','APP_ORIGIN','RENDER_EXTERNAL_URL','AUTH_ENABLED'])if(!clean[key])delete clean[key];
- const result=schema.safeParse(clean);if(!result.success)throw new ConfigurationError('Configuração inválida. Confira as variáveis do backend.');
+ const result=schema.safeParse(clean);if(!result.success){const fields=[...new Set(result.error.issues.map(issue=>issue.path[0]).filter((key):key is string=>typeof key==='string'&&Object.hasOwn(schema.shape,key)))];throw new ConfigurationError('Variáveis ausentes ou inválidas: '+fields.join(', ')+'.');}
  const config=result.data,production=config.NODE_ENV==='production';
  const enabled=config.AUTH_ENABLED===undefined?production:config.AUTH_ENABLED==='true';
  const sourceOrigin=config.APP_ORIGIN||config.RENDER_EXTERNAL_URL;
@@ -37,7 +37,7 @@ export function settings(environment:NodeJS.ProcessEnv=process.env){
  if(enabled&&(!config.AUTH_USERNAME||!config.AUTH_PASSWORD_HASH||!validPasswordHash(config.AUTH_PASSWORD_HASH)))throw new ConfigurationError('Configure AUTH_USERNAME e AUTH_PASSWORD_HASH válidos.');
  try{schemaName(config.DATABASE_SCHEMA);connectionOptions(config.DATABASE_URL,{production,max:config.DATABASE_POOL_MAX,ca:config.DATABASE_CA_CERT});}catch{throw new ConfigurationError('DATABASE_URL inválida ou TLS inseguro. Confira a conexão PostgreSQL.');}
  if(config.RENDER==='true'&&!production)throw new ConfigurationError('Render exige NODE_ENV=production.');
- new Intl.DateTimeFormat('pt-BR',{timeZone:config.BUSINESS_TIMEZONE});
- if(config.DISPLAY_CURRENCY)new Intl.NumberFormat('pt-BR',{style:'currency',currency:config.DISPLAY_CURRENCY});
+ try{new Intl.DateTimeFormat('pt-BR',{timeZone:config.BUSINESS_TIMEZONE});}catch{throw new ConfigurationError('BUSINESS_TIMEZONE inválido. Use um identificador de fuso IANA.');}
+ if(config.DISPLAY_CURRENCY)try{new Intl.NumberFormat('pt-BR',{style:'currency',currency:config.DISPLAY_CURRENCY});}catch{throw new ConfigurationError('DISPLAY_CURRENCY inválida. Confira o código de moeda.');}
  return {...config,production,host:production?'0.0.0.0':'127.0.0.1',auth:{enabled,production,username:config.AUTH_USERNAME,passwordHash:config.AUTH_PASSWORD_HASH,origin}};
 }

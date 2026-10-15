@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import {testStore,testUrl,destroy} from './helpers/database.js';
 import {Store} from '../src/storage/store.js';
+import {StartupFailure} from '../src/startup-diagnostics.js';
 import {connectionOptions} from '../src/storage/connection.js';
 import {dashboard} from '../src/domain/metrics.js';
 import type {Snapshot,Order} from '../src/domain/models.js';
@@ -23,7 +24,7 @@ test('migrações idempotentes concorrentes, schema privado e RLS nos dados e se
   const publicAccess=await store.db.query('SELECT 1 FROM pg_namespace n, LATERAL aclexplode(n.nspacl) a WHERE n.nspname=$1 AND a.grantee=0',[schema]);assert.equal(publicAccess.rowCount,0);
   for(const role of ['anon','authenticated'])if((await store.db.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[role])).rowCount)assert.equal((await store.db.query('SELECT has_schema_privilege($1,$2,$3) AS allowed',[role,schema,'USAGE'])).rows[0].allowed,false);
   await store.db.query(`INSERT INTO "${store.schema}".schema_migrations(version) VALUES(999)`);
-  await assert.rejects(Store.open(testUrl(),{schema:store.schema}),/mais recente/);
+  await assert.rejects(Store.open(testUrl(),{schema:store.schema}),error=>error instanceof StartupFailure&&error.stage==='database-migrations'&&(error.cause as {code?:string})?.code==='BRAZI_DB_VERSION');
  }finally{await second.close();await destroy(store);}
 });
 test('concessão e limite de login são atômicos entre pools concorrentes',async()=>{

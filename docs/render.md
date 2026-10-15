@@ -125,3 +125,27 @@ npm run test:e2e
 Cada teste cria/remove seu schema isolado. E2E requer Chromium e usa token INK desabilitado, credencial aleatória e dados fictícios. O build não exige banco nem credenciais. A execução dos testes de integração exige banco real disponível; não são substituídos por mocks de SQL ou ignorados silenciosamente.
 
 Após um futuro deploy autorizado, confira certificado HTTPS, bloqueio 401 sem login, login/logout, cookies seguros, migrações, sincronização e persistência após restart. Conectividade específica do Supabase, aceitação do Blueprint e comportamento de suspensão precisam de validação no serviço real; os testes locais não os comprovam.
+
+## Diagnosticar falha durante npm start
+
+A inicialização registra somente etapa, código reconhecido e orientação estática. Não registra URL, hostname real, usuário do banco, senha, hash, token, SQL, resposta do pooler ou stack. Erros desconhecidos são apresentados como NAO_CLASSIFICADO. A configuração pode informar nomes de variáveis inválidas, nunca seus valores.
+
+Exemplo seguro:
+
+```text
+[Brazi startup] etapa=conexão PostgreSQL; diagnóstico=SELF_SIGNED_CERT_IN_CHAIN; Cadeia TLS não confiável. Configure a CA oficial em DATABASE_CA_CERT; não desative a verificação.
+```
+
+| Etapa / diagnóstico | Verificação |
+| --- | --- |
+| configuração | Variáveis obrigatórias, formatos, origem HTTPS, fuso e moeda |
+| conexão / ENOTFOUND ou EAI_AGAIN | Host exato do Session Pooler e DNS |
+| conexão / ENETUNREACH, ECONNREFUSED ou ETIMEDOUT | Pooler IPv4, porta, restrições de rede e projeto Supabase ativo |
+| conexão / erro TLS | CA oficial em DATABASE_CA_CERT e hostname correto; nunca desligar verificação |
+| conexão / 28P01 ou 28000 | Usuário do pooler, senha e codificação de caracteres reservados na URL |
+| conexão / 53300, 57P03 ou XX000 | Limite de conexões, projeto pausado/retomando, usuário e endpoint do pooler |
+| migrações / 42501 | Propriedade do schema e permissões para criar/revogar grants |
+| migrações / BRAZI_DB_VERSION, 42P07 ou 42P01 | Versão da aplicação e histórico do schema; não apagar dados para contornar |
+| abertura da porta HTTP / EADDRINUSE ou EACCES | PORT do Render e conflito de processos |
+
+A mensagem genérica das versões anteriores não permite concluir qual dessas causas ocorreu. A nova saída identifica a etapa efetivamente alcançada. Falha continua encerrando o processo com código não zero, sem desabilitar TLS ou autenticação. Conexões são fechadas quando a preparação HTTP ou abertura da porta falha. Migrações continuam transacionais e não iniciam sincronização da INK.
