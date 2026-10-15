@@ -1,6 +1,8 @@
-import 'dotenv/config';
-import {isAbsolute,resolve,sep} from 'node:path';
-import {existsSync,statSync} from 'node:fs';
+import {config as loadEnvironment} from 'dotenv';
+// Em produção, credenciais vêm exclusivamente do ambiente do processo.
+if(process.env.NODE_ENV!=='production')loadEnvironment();
+import {schemaName} from './storage/migrate.js';
+import {connectionOptions} from './storage/connection.js';
 import {z} from 'zod';
 import {validPasswordHash} from './auth/password.js';
 export class ConfigurationError extends Error {}
@@ -8,7 +10,10 @@ const schema=z.object({
  NODE_ENV:z.enum(['development','test','production']).default('development'),
  RESERVA_INK_TOKEN:z.string().trim().min(1).refine(s=>! /\s/.test(s)).optional(),
  PORT:z.coerce.number().int().min(1).max(65535).default(3000),
- DATABASE_PATH:z.string().min(1).default('.local/brazi.sqlite'),
+ DATABASE_URL:z.string().min(1),
+ DATABASE_SCHEMA:z.string().regex(/^[a-z][a-z0-9_]{0,62}$/).default('brazi'),
+ DATABASE_POOL_MAX:z.coerce.number().int().min(1).max(5).default(3),
+ DATABASE_CA_CERT:z.string().optional(),
  BUSINESS_TIMEZONE:z.string().default('America/Sao_Paulo'),
  API_PAUSE_MS:z.coerce.number().int().min(1500).max(30000).default(1800),
  SYNC_MAX_PAGES:z.coerce.number().int().min(1).max(10000).default(1000),
@@ -30,12 +35,8 @@ export function settings(environment:NodeJS.ProcessEnv=process.env){
  if(sourceOrigin){try{const url=new URL(sourceOrigin);if(url.username||url.password||url.search||url.hash||!['','/'].includes(url.pathname))throw new ConfigurationError();if(production?url.protocol!=='https:':!['http:','https:'].includes(url.protocol))throw new ConfigurationError();origin=url.origin;}catch{throw new ConfigurationError('APP_ORIGIN deve ser uma origem válida, HTTPS em produção.');}}
  if(production&&(!enabled||!origin))throw new ConfigurationError('Produção exige autenticação e APP_ORIGIN ou RENDER_EXTERNAL_URL HTTPS.');
  if(enabled&&(!config.AUTH_USERNAME||!config.AUTH_PASSWORD_HASH||!validPasswordHash(config.AUTH_PASSWORD_HASH)))throw new ConfigurationError('Configure AUTH_USERNAME e AUTH_PASSWORD_HASH válidos.');
- if(production&&!isAbsolute(config.DATABASE_PATH))throw new ConfigurationError('Produção exige DATABASE_PATH absoluto para armazenamento persistente.');
- if(config.RENDER==='true'){
-  if(!production)throw new ConfigurationError('Render exige NODE_ENV=production.');
-  const path=resolve(config.DATABASE_PATH);
-  if(!path.startsWith('/var/data'+sep)||!existsSync('/var/data')||!statSync('/var/data').isDirectory())throw new ConfigurationError('Render exige disco persistente montado em /var/data e DATABASE_PATH dentro dele.');
- }
+ try{schemaName(config.DATABASE_SCHEMA);connectionOptions(config.DATABASE_URL,{production,max:config.DATABASE_POOL_MAX,ca:config.DATABASE_CA_CERT});}catch{throw new ConfigurationError('DATABASE_URL inválida ou TLS inseguro. Confira a conexão PostgreSQL.');}
+ if(config.RENDER==='true'&&!production)throw new ConfigurationError('Render exige NODE_ENV=production.');
  new Intl.DateTimeFormat('pt-BR',{timeZone:config.BUSINESS_TIMEZONE});
  if(config.DISPLAY_CURRENCY)new Intl.NumberFormat('pt-BR',{style:'currency',currency:config.DISPLAY_CURRENCY});
  return {...config,production,host:production?'0.0.0.0':'127.0.0.1',auth:{enabled,production,username:config.AUTH_USERNAME,passwordHash:config.AUTH_PASSWORD_HASH,origin}};

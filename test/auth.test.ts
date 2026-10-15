@@ -1,36 +1,33 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
-import {mkdtempSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import {dashboardApp} from '../src/dashboard-app.js';
-import {Store} from '../src/storage/store.js';
+import {testStore,destroy} from './helpers/database.js';
 import {SyncService} from '../src/integration/sync.js';
 import {passwordHash,verifyPassword,validPasswordHash} from '../src/auth/password.js';
 import type {AuthOptions} from '../src/auth/auth.js';
 import {settings} from '../src/settings.js';
 const origin='https://brazi-test.example';
 const headers={host:'render-internal:10000','x-forwarded-proto':'https',origin,'x-brazi-request':'1'};
-async function fixture(file=':memory:'){
+async function fixture(){
  const password=randomBytes(24).toString('hex');
  const config:AuthOptions={enabled:true,production:true,username:'test-user',passwordHash:await passwordHash(password),origin};
- const store=new Store(file),sync=new SyncService(store,undefined,'America/Sao_Paulo');
+ const store=await testStore(),sync=new SyncService(store,undefined,'America/Sao_Paulo');
  const app=dashboardApp(store,sync,{timezone:'America/Sao_Paulo',tokenConfigured:false,auth:config,staticRoot:'/not-existing'});
- return {password,config,store,app,close:async()=>{await app.close();store.close();}};
+ return {password,config,store,app,close:async()=>{await app.close();await destroy(store);}};
 }
 function cookie(response:{headers:Record<string,unknown>}){const value=response.headers['set-cookie'];return String(Array.isArray(value)?value[value.length-1]:value).split(';')[0]!;}
 test('hash salgado usa scrypt, verifica senha e não aceita hash/senha inválidos',async()=>{
  const value=randomBytes(24).toString('hex');const a=await passwordHash(value),b=await passwordHash(value);
  assert.notEqual(a,b);assert.ok(validPasswordHash(a));assert.equal(await verifyPassword(value,a),true);assert.equal(await verifyPassword(randomBytes(24).toString('hex'),a),false);assert.equal(await verifyPassword(value,'invalid'),false);await assert.rejects(passwordHash(''));
 });
-test('produção fecha sem credenciais, origem HTTPS ou caminho persistente e respeita PORT',async()=>{
+test('produção fecha sem credenciais, origem HTTPS ou conexão segura e respeita PORT',async()=>{
  const hash=await passwordHash(randomBytes(24).toString('hex'));
- const valid={NODE_ENV:'production',AUTH_USERNAME:'test-user',AUTH_PASSWORD_HASH:hash,APP_ORIGIN:origin,DATABASE_PATH:'/tmp/brazi-production-test.sqlite',PORT:'10000'};
+ const valid={NODE_ENV:'production',AUTH_USERNAME:'test-user',AUTH_PASSWORD_HASH:hash,APP_ORIGIN:origin,DATABASE_URL:'postgresql://user@db.example/brazi?sslmode=verify-full',PORT:'10000'};
  const config=settings(valid);assert.equal(config.PORT,10000);assert.equal(config.host,'0.0.0.0');assert.equal(config.auth.enabled,true);
- for(const patch of [{AUTH_ENABLED:'false'},{AUTH_PASSWORD_HASH:''},{AUTH_USERNAME:''},{APP_ORIGIN:'http://example.com'},{APP_ORIGIN:origin+'/path'},{DATABASE_PATH:'.local/brazi.sqlite'},{APP_ORIGIN:undefined}])assert.throws(()=>settings({...valid,...patch}));
+ for(const patch of [{AUTH_ENABLED:'false'},{AUTH_PASSWORD_HASH:''},{AUTH_USERNAME:''},{APP_ORIGIN:'http://example.com'},{APP_ORIGIN:origin+'/path'},{DATABASE_URL:'postgresql://user@db.example/brazi?sslmode=disable'},{APP_ORIGIN:undefined}])assert.throws(()=>settings({...valid,...patch}));
  assert.equal(settings({...valid,APP_ORIGIN:undefined,RENDER_EXTERNAL_URL:origin}).auth.origin,origin);
- assert.throws(()=>settings({...valid,RENDER:'true'}),/disco persistente/);
+ assert.equal(settings({...valid,RENDER:'true'}).DATABASE_POOL_MAX,3);
 });
 test('HTTPS é obrigatório, redirecionamento usa origem fixa, health não revela dados',async()=>{
  const f=await fixture();try{
@@ -48,7 +45,7 @@ test('login genérico, cookie Secure/HttpOnly/Strict, token armazenado só como 
   const login=await f.app.inject({url:'/api/auth/login',method:'POST',headers,payload:{username:'test-user',password:f.password}});assert.equal(login.statusCode,200);
   const raw=String(login.headers['set-cookie']);assert.match(raw,/__Host-brazi_session=/);assert.match(raw,/HttpOnly/);assert.match(raw,/Secure/);assert.match(raw,/SameSite=Strict/);assert.match(raw,/Path=\//);assert.doesNotMatch(raw,/Domain=/);
   const sessionCookie=cookie(login),token=sessionCookie.split('=')[1]!;
-  const stored=f.store.db.prepare('SELECT token_hash FROM auth_sessions').get();assert.notEqual(stored?.token_hash,token);assert.equal(String(stored?.token_hash).length,64);
+  const stored=(await f.store.db.query(`SELECT token_hash FROM "${f.store.schema}".auth_sessions`)).rows[0];assert.notEqual(stored?.token_hash,token);assert.equal(String(stored?.token_hash).length,64);
   const state=await f.app.inject({url:'/api/status',headers:{...headers,cookie:sessionCookie}});assert.equal(state.statusCode,200);
   const me=await f.app.inject({url:'/api/auth/session',headers:{...headers,cookie:sessionCookie}});assert.equal(me.json().authenticated,true);
   const logout=await f.app.inject({url:'/api/auth/logout',method:'POST',headers:{...headers,cookie:sessionCookie},payload:{}});assert.equal(logout.statusCode,200);assert.match(String(logout.headers['set-cookie']),/Max-Age=0/);
@@ -76,18 +73,19 @@ test('sessão expirada ou token forjado não autentica e login novo gira o token
   const next=await f.app.inject({...request,headers:{...headers,cookie:old}});assert.notEqual(cookie(next),old);
   assert.equal((await f.app.inject({url:'/api/status',headers:{...headers,cookie:old}})).statusCode,401);
   assert.equal((await f.app.inject({url:'/api/status',headers:{...headers,cookie:`__Host-brazi_session=${randomBytes(32).toString('base64url')}`}})).statusCode,401);
-  f.store.db.exec('UPDATE auth_sessions SET expires_at=0');assert.equal((await f.app.inject({url:'/api/status',headers:{...headers,cookie:cookie(next)}})).statusCode,401);
+  await f.store.db.query(`UPDATE "${f.store.schema}".auth_sessions SET expires_at=0`);assert.equal((await f.app.inject({url:'/api/status',headers:{...headers,cookie:cookie(next)}})).statusCode,401);
  }finally{await f.close();}
 });
-test('sessões sobrevivem ao restart com disco e são revogadas ao trocar credencial',async()=>{
- const dir=mkdtempSync(join(tmpdir(),'brazi-auth-')),path=join(dir,'db.sqlite'),f=await fixture(path);const config=f.config;
- const login=await f.app.inject({url:'/api/auth/login',method:'POST',headers,payload:{username:config.username,password:f.password}});const saved=cookie(login);await f.close();
- const store=new Store(path);let app=dashboardApp(store,new SyncService(store,undefined,'America/Sao_Paulo'),{timezone:'America/Sao_Paulo',tokenConfigured:false,auth:config,staticRoot:'/none'});
+test('sessões sobrevivem ao restart com PostgreSQL e são revogadas ao trocar credencial',async()=>{
+ const f=await fixture(),config=f.config,schema=f.store.schema;
+ const login=await f.app.inject({url:'/api/auth/login',method:'POST',headers,payload:{username:config.username,password:f.password}});const saved=cookie(login);
+ await f.app.close();await f.store.close();
+ const store=await testStore(schema);let app=dashboardApp(store,new SyncService(store,undefined,'America/Sao_Paulo'),{timezone:'America/Sao_Paulo',tokenConfigured:false,auth:config,staticRoot:'/none'});
  try{
   assert.equal((await app.inject({url:'/api/status',headers:{...headers,cookie:saved}})).statusCode,200);await app.close();
   app=dashboardApp(store,new SyncService(store,undefined,'America/Sao_Paulo'),{timezone:'America/Sao_Paulo',tokenConfigured:false,auth:{...config,passwordHash:await passwordHash(randomBytes(24).toString('hex'))},staticRoot:'/none'});
   assert.equal((await app.inject({url:'/api/status',headers:{...headers,cookie:saved}})).statusCode,401);
- }finally{await app.close();store.close();rmSync(dir,{recursive:true});}
+ }finally{await app.close();await destroy(store);}
 });
 
 test('operações autenticadas rejeitam corpo não JSON antes de alterar estado',async()=>{

@@ -31,3 +31,8 @@ secrets/
 *.pem
 *.key
 .envrc
+*.sql.gz
+*.pgdump
+*.backup
+.pgpass
+.pg_service.conf

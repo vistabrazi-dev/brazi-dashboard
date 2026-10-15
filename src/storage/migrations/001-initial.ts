@@ -1,0 +1,20 @@
+// Schema privado; JSONB contém somente o modelo comercial normalizado, sem comprador.
+export const initialMigration=`
+ CREATE TABLE orders(id BIGINT PRIMARY KEY,day TEXT NOT NULL,data JSONB NOT NULL,seen BIGINT NOT NULL);
+ CREATE INDEX orders_day ON orders(day);
+ CREATE TABLE products(id BIGINT PRIMARY KEY,data JSONB NOT NULL);
+ CREATE TABLE refunds(order_id BIGINT PRIMARY KEY,data JSONB NOT NULL);
+ CREATE TABLE runs(id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,status TEXT NOT NULL,stage TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 0,pages INTEGER NOT NULL DEFAULT 0,processed INTEGER NOT NULL DEFAULT 0,error TEXT,started_at TEXT NOT NULL,finished_at TEXT,heartbeat BIGINT NOT NULL);
+ CREATE UNIQUE INDEX runs_one_active ON runs((status)) WHERE status='running';
+ CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+ CREATE TABLE auth_sessions(token_hash TEXT PRIMARY KEY,credential_tag TEXT NOT NULL,expires_at BIGINT NOT NULL);
+ CREATE INDEX auth_sessions_expiry ON auth_sessions(expires_at);
+ CREATE TABLE auth_attempts(key TEXT PRIMARY KEY,count INTEGER NOT NULL,reset_at BIGINT NOT NULL);
+ ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE refunds ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE runs ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE meta ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE auth_sessions ENABLE ROW LEVEL SECURITY;
+ ALTER TABLE auth_attempts ENABLE ROW LEVEL SECURITY;
+`;

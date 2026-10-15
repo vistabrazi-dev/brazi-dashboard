@@ -1,7 +1,7 @@
 import {setTimeout as sleep} from 'node:timers/promises';
 import {EnvHttpProxyAgent,setGlobalDispatcher} from 'undici';
 export function configureProxy(){if(process.env.HTTPS_PROXY||process.env.HTTP_PROXY||process.env.https_proxy||process.env.http_proxy)setGlobalDispatcher(new EnvHttpProxyAgent());}
-export interface TransportOptions { pauseMs?:number; signal?:AbortSignal; fetcher?:typeof fetch; wait?:(ms:number,signal?:AbortSignal)=>Promise<void>; onWait?:(seconds:number)=>void }
+export interface TransportOptions { pauseMs?:number; signal?:AbortSignal; fetcher?:typeof fetch; wait?:(ms:number,signal?:AbortSignal)=>Promise<void>; onWait?:(seconds:number)=>void|Promise<void> }
 export function pacedFetch(options:TransportOptions={}):typeof fetch {
  const wait=options.wait??(async(ms,signal)=>{await sleep(ms,undefined,{signal});});
  const fetcher=options.fetcher??fetch;
@@ -18,7 +18,7 @@ export function pacedFetch(options:TransportOptions={}):typeof fetch {
    const delay=Math.max(response.status===429?60000:5000,Number.isFinite(requested)?requested:0,Math.min(240000,5000*2**attempt));
    await response.body?.cancel();
    if(delay>600000)throw new Error('API solicitou espera superior a dez minutos. Tente novamente mais tarde.');
-   options.onWait?.(Math.ceil(delay/1000));await wait(delay,options.signal);
+   await options.onWait?.(Math.ceil(delay/1000));await wait(delay,options.signal);
   }
   throw new Error('API indisponível após tentativas limitadas.');
  }) as typeof fetch;

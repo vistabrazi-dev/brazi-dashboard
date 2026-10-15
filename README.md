@@ -1,10 +1,10 @@
 # Brazi — dashboard gerencial
 
-React + TypeScript, Fastify e SQLite. Sincroniza a Reserva INK com segurança, mantém histórico local e apresenta indicadores comerciais, gráficos, produtos e conciliação. Contrato de origem: [docs/api-1.yaml](docs/api-1.yaml).
+React + TypeScript, Fastify e PostgreSQL. Sincroniza a Reserva INK com segurança, mantém histórico persistente e apresenta indicadores comerciais, gráficos, produtos e conciliação. Contrato de origem: [docs/api-1.yaml](docs/api-1.yaml).
 
 ## Executar localmente
 
-Requisitos: **Node.js 24.x** e npm. O SQLite é o incluído no Node; não há banco ou serviço externo a instalar.
+Requisitos: **Node.js 24.x** e npm. Configure também um banco PostgreSQL (local ou Supabase). A hospedagem gratuita prevista usa Render Free + Supabase Free.
 
 ```sh
 npm ci
@@ -12,7 +12,9 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-Edite `.env` e preencha `RESERVA_INK_TOKEN` com um token com `store.orders.read`, `store.products.read` e `store.refunds.read`. A Reserva INK documenta Bearer JWT/OAuth2 obtido via desenvolvedor; emissão e renovação automáticas não estão especificadas. Não compartilhe nem versione o token. Variáveis exportadas no processo têm precedência sobre `.env`.
+Edite `.env`, configure `DATABASE_URL` com a conexão privada do PostgreSQL e preencha `RESERVA_INK_TOKEN` com um token com `store.orders.read`, `store.products.read` e `store.refunds.read`. A Reserva INK documenta Bearer JWT/OAuth2 obtido via desenvolvedor; emissão e renovação automáticas não estão especificadas. Não compartilhe nem versione o token. Variáveis exportadas no processo têm precedência sobre `.env`.
+
+Consulte [Supabase e Render Free](docs/render.md) para obter a URL pelo pooler e configurar TLS. Somente para PostgreSQL local fora de produção, use `sslmode=disable` com host loopback. O servidor não usa SQLite e recusa iniciar sem PostgreSQL acessível; nunca há fallback para disco efêmero.
 
 Para a execução compilada:
 
@@ -43,7 +45,11 @@ Abra `http://127.0.0.1:5173`. O Vite encaminha `/api` ao Fastify na porta config
 | --- | --- |
 | `RESERVA_INK_TOKEN` | Credencial privada; necessária somente para sincronizar |
 | `PORT` | `3000`, servidor local |
-| `DATABASE_PATH` | `.local/brazi.sqlite`, caminho relativo à raiz do projeto |
+| `DATABASE_URL` | Obrigatória; conexão PostgreSQL privada, usada somente no backend |
+| `DATABASE_POOL_MAX` | `3`, máximo de conexões por processo (1–5) |
+| `DATABASE_SCHEMA` | `brazi`, schema privado; mudar cria outro conjunto de dados |
+| `DATABASE_CA_CERT` | Opcional; certificado PEM da CA oficial para verificação TLS |
+| `TEST_DATABASE_URL` | Somente testes; banco local separado, nome terminado em `_test` |
 | `BUSINESS_TIMEZONE` | `America/Sao_Paulo`, datas comerciais |
 | `API_PAUSE_MS` | `1800`, pausa entre chamadas; mínimo permitido 1500 |
 | `SYNC_MAX_PAGES` | `1000`, limite de segurança por coleção |
@@ -52,7 +58,7 @@ Abra `http://127.0.0.1:5173`. O Vite encaminha `/api` ao Fastify na porta config
 
 Sem `DISPLAY_CURRENCY`, os números são exibidos em **unidades da API**, sem presumir reais ou centavos da origem. Internamente, cada unidade decimal é subdividida em 100 partes para cálculo exato. Definir BRL apenas muda a apresentação; não converte valores nem confirma sua unidade.
 
-O servidor funciona sem token para consultar um banco existente ou mostrar o estado inicial. Nunca use prefixos como `VITE_` para a credencial. `.env`, banco, WAL, builds e resultados dos testes são ignorados pelo Git. O banco é criado com permissões restritas e não guarda dados pessoais de compradores.
+O servidor funciona sem token para consultar um banco existente ou mostrar o estado inicial. Nunca use prefixos como `VITE_` para a credencial. `.env`, bancos antigos, exportações, backups, builds e resultados dos testes são ignorados pelo Git. O schema `brazi` é privado, tem RLS habilitada e não guarda dados pessoais de compradores. Não o exponha pela Data API do Supabase.
 
 ## Indicadores e regras comerciais
 
@@ -95,7 +101,7 @@ Somente `GET` nos endpoints documentados de pedidos, produtos e históricos de r
 
 As chamadas têm timeout de 30 s. HTTP 429 respeita `Retry-After`, com pausa mínima de 60 s, backoff e tentativas limitadas; 502/503/504 e falhas de rede também têm tentativas limitadas. Credenciais nunca são encaminhadas em redirects. Proxies do ambiente e confiança TLS são preservados; não há desativação de certificados. HTTP 401/403 interrompe a carga e preserva os dados anteriores.
 
-Pedidos e produtos são normalizados sem dados pessoais e publicados juntos em uma transação SQLite, após consultar os históricos relevantes. UPSERT por ID impede duplicações; cada pedido tem seus itens substituídos pelo estado mais recente. Não persistimos buyer, endereços, CPF, telefone, e-mail, imagens de pedido, tokens ou respostas brutas.
+Pedidos e produtos são normalizados sem dados pessoais e publicados juntos em uma transação PostgreSQL, após consultar os históricos relevantes. UPSERT por ID impede duplicações; cada pedido tem seus itens substituídos pelo estado mais recente. Não persistimos buyer, endereços, CPF, telefone, e-mail, imagens de pedido, tokens ou respostas brutas.
 
 Pedidos que desaparecerem da origem são conservados e enviados à conciliação. Não há exclusão silenciosa de vendas históricas. Cargas concorrentes são bloqueadas no banco, com heartbeat; uma execução interrompida pode ser retomada por uma nova carga após a concessão expirar (aproximadamente dois minutos). Falha ou cancelamento não substitui a última carga concluída.
 
@@ -111,7 +117,9 @@ npm run build
 npm run test:e2e
 ```
 
-Os testes de navegador usam Chromium em `/usr/bin/chromium`. Em outra máquina, defina `CHROMIUM_PATH` para um executável compatível, ou instale o Chromium pelo Playwright e configure esse caminho. Os testes E2E usam um banco isolado em `/tmp`, token desabilitado no servidor de teste e respostas simuladas; não alteram sua base nem chamam a INK.
+Os testes de persistência e autenticação exigem PostgreSQL real. Crie um banco **local e exclusivo para testes**, com nome terminado em `_test`, e defina `TEST_DATABASE_URL` em `.env` (host loopback, `sslmode=disable`). Cada teste cria/remove um schema aleatório, sem acessar `DATABASE_URL` de produção. Ausência de banco é falha, não teste ignorado. Os testes E2E também removem seu schema isolado ao terminar.
+
+Os testes de navegador usam Chromium em `/usr/bin/chromium`. Em outra máquina, defina `CHROMIUM_PATH` para um executável compatível, ou instale o Chromium pelo Playwright e configure esse caminho. Os testes E2E usam um schema PostgreSQL isolado, token desabilitado no servidor de teste e respostas simuladas; não alteram sua base nem chamam a INK.
 
 A suíte cobre elegibilidade, cálculos decimais, rateio de centavos, reembolsos parciais, gratuidades, datas, períodos anteriores, SKU ambíguo, paginação, 429, persistência, idempotência, rollback, cache, proteção da atualização e uso da interface em desktop/celular. A validação real da base depende da sincronização com token válido.
 
@@ -120,20 +128,20 @@ O diagnóstico anterior permanece disponível com `npm run diagnose`, agora usan
 ## Organização e produção
 
 - `src/integration/`: acesso e sincronização da INK.
-- `src/storage/`: SQLite e publicação atômica de cargas.
+- `src/storage/`: PostgreSQL, migrações e publicação atômica de cargas.
 - `src/domain/`: normalização, regras, valores monetários e indicadores.
 - `src/dashboard-app.ts`: API local e arquivos compilados da interface.
 - `web/`: interface React; nenhum acesso direto à INK.
 - `test/` e `e2e/`: verificações automatizadas.
 
-O projeto inclui [render.yaml](render.yaml) e um [guia de deploy no Render](docs/render.md). Nenhum deploy foi executado. O Render exige um Web Service pago para anexar disco persistente; o Blueprint usa Starter, uma instância e disco de 1 GB em `/var/data`.
+O projeto inclui [render.yaml](render.yaml) para **Render Free, sem disco**, e um [guia completo de Supabase Free + Render](docs/render.md). O React compilado é servido pelo Fastify na mesma origem; não é necessário um serviço pago nem um frontend separado. O banco fica no Supabase e não é perdido a cada deploy. Nenhum deploy foi executado.
 
-Em produção, Fastify escuta em `0.0.0.0` usando `PORT`; autenticação, origem HTTPS e DATABASE_PATH absoluto são obrigatórios. O proxy do Render termina TLS e a aplicação protege sessões com cookies Secure/HttpOnly/SameSite=Strict, logout revogável, proteção de origem e limite de tentativas. Sem essas configurações, o servidor recusa iniciar. O build de produção é `npm ci --include=dev && npm run build && npm prune --omit=dev`.
+Em produção, Fastify escuta em `0.0.0.0` usando `PORT`; autenticação, origem HTTPS e DATABASE_URL com TLS verificado são obrigatórios. Cookies Secure/HttpOnly/SameSite=Strict, proteção de origem, logout revogável e limites persistentes de login são preservados. Sessões ficam no PostgreSQL e sobrevivem a reinícios, com a mesma origem e credenciais.
 
-Configure usuário e hash de senha apenas por variáveis de ambiente. Gere o hash com `npm run auth:password` após o build, em um terminal confiável; nunca inclua a senha ou hash no Git. A conta é administrativa e única, sem cadastro público ou recuperação por e-mail.
+Configure usuário e hash de senha apenas no ambiente. Gere o hash com `npm run auth:password` após o build, em terminal confiável; nunca inclua senha ou hash no Git. A conta é administrativa e única, sem cadastro público ou recuperação por e-mail. Em desenvolvimento a autenticação pode ficar desabilitada, com bind restrito ao loopback.
 
-Para manter o desenvolvimento local simples, autenticação fica desabilitada por padrão fora de produção, com bind restrito ao loopback. Para testar login local, defina AUTH_ENABLED=true, AUTH_USERNAME e AUTH_PASSWORD_HASH no ambiente. Cookies Secure são obrigatórios em produção; no HTTP local o cookie de desenvolvimento é diferente.
+As migrações versionadas rodam transacionalmente na inicialização e também com `npm run migrate` / `npm run migrate:prod`. O build não conecta ao banco. Em produção, arquivos `.env` não são carregados; credenciais vêm exclusivamente do ambiente do processo. Para importar o SQLite anterior, veja o procedimento privado no guia; a importação exige destino comercial vazio e não transfere sessões. Mantenha a base antiga como backup privado até conferir os resultados.
 
-Não exponha o servidor diretamente à Internet fora do ingresso HTTPS confiável descrito no guia. Para múltiplas instâncias, migre persistência e coordenação de cargas para PostgreSQL/serviço compartilhado antes de escalar.
+Os planos gratuitos podem suspender por inatividade, limitar conexões, armazenamento, tráfego e horas de execução. Uma sincronização é um trabalho no processo web, sem garantia de conclusão se o Render suspender ou reiniciar. A última carga concluída permanece no PostgreSQL; execute novamente a carga completa após uma interrupção. Não há serviço de jobs ou disponibilidade contínua garantida.
 
-Faça backup consistente do SQLite com ferramenta de backup SQLite ou com o processo parado, incluindo estado WAL quando aplicável. Scripts, builds e dependências são reproduzíveis; o banco real contém os dados comerciais sincronizados e deve ser protegido separadamente.
+Faça backups privados do PostgreSQL e teste a restauração. Não presuma backup automático ou recuperação pontual no plano gratuito. Nunca versione dumps ou URLs de conexão.

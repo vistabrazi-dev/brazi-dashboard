@@ -1,66 +1,62 @@
-# Deploy no Render — preparação, sem deploy executado
+# Supabase Free + Render Free — preparação sem deploy
 
-O projeto contém um Blueprint `render.yaml`. Nenhum recurso foi criado, nenhum comando de deploy foi executado e nenhuma credencial foi incluída no repositório.
+A aplicação usa React + TypeScript servido pelo Fastify, na mesma origem HTTPS. Pedidos, produtos, reembolsos, execução da sincronização, sessões e limites de login ficam no PostgreSQL do Supabase. O Render usa **Free sem disco persistente**. Esta configuração não cria projetos nem executa deploy automaticamente por comandos locais.
 
-## Plano necessário
+## 1. Criar o banco no Supabase
 
-**Sim: o serviço precisa ser pago para utilizar disco persistente no Render.** O plano Free de Web Service não permite anexar disco persistente. O Blueprint seleciona **Starter**, uma instância, e um disco inicial de **1 GB**; a cobrança do disco é adicional à do serviço. Confira valores atuais no Render antes de aplicar a configuração.
+1. Quando decidir implantar, crie um projeto no plano **Free**, escolhendo uma região próxima do Render. Guarde a senha do banco em um gerenciador de senhas.
+2. Abra **Connect** no painel do projeto. Copie a conexão PostgreSQL do **Session pooler** (Supavisor, normalmente porta 5432), com host, banco e usuário exatos apresentados no painel. Não invente o host nem use a URL HTTP do projeto.
+3. Substitua a senha somente no campo privado do ambiente; caracteres reservados na senha devem estar codificados para URL. Nunca cole a URL no GitHub, chat, screenshots ou logs.
+4. Use `sslmode=verify-full` na URL (ou `require`, que esta aplicação também eleva para verificação completa do certificado). O driver sempre usa TLS com `rejectUnauthorized: true` para conexões remotas e em produção. Não use `no-verify`, não desligue validação TLS e não configure `NODE_TLS_REJECT_UNAUTHORIZED=0`.
+5. Se a cadeia de certificados do banco não for reconhecida, obtenha a CA oficial do projeto no Supabase e informe seu PEM em `DATABASE_CA_CERT`. Preserve quebras de linha. Não baixe certificados de fontes não confiáveis nem altere o código para aceitar qualquer certificado.
 
-Referências: [Persistent Disks](https://render.com/docs/disks), [Pricing](https://render.com/pricing), [Blueprint specification](https://render.com/docs/blueprint-spec), [Web Services](https://render.com/docs/web-services), [Environment variables](https://render.com/docs/configure-environment-variables).
+A conexão direta do Supabase Free pode depender de IPv6. Se a rede do Render não a alcançar, use o pooler compartilhado com suporte IPv4, em vez de contratar IPv4 dedicado. Copie o endereço atual do painel. Se preferir o **Transaction pooler** (normalmente 6543), o código usa queries sem prepared statements nomeados, bloqueios somente transacionais e `SET LOCAL` dentro de transações; não depende de estado de sessão. O Session pooler é a opção inicial recomendada para este processo Node persistente.
 
-O acesso direto à documentação do Render retornou 403 na rede deste ambiente. Não foi possível validar o Blueprint no serviço do Render nem consultar preços ao vivo; os testes locais verificam sua coerência com a aplicação. A revisão/validação no Render deve preceder a criação do serviço pago.
+Use a credencial PostgreSQL administrativa do projeto, que deve ser proprietária do schema criado pela aplicação. Não use `anon key`, `publishable key`, `service_role key` ou Supabase Auth como substitutos de `DATABASE_URL`. Nenhuma chave do Supabase vai ao frontend.
 
-## Preparação do repositório
+O schema padrão **brazi** é criado pelas migrações, com RLS nas tabelas e revogação de acesso de PUBLIC, anon e authenticated. Não o adicione aos schemas expostos pela Data API. O backend acessa as tabelas como proprietário, sem políticas públicas. Se adotar um usuário de runtime com privilégios menores futuramente, será necessário planejar grants e políticas específicas; esta versão executa migrações com o próprio usuário configurado.
 
-Quando decidir fazer o deploy, envie o código para o repositório privado autorizado. Não envie `.env`, `.local`, banco SQLite, WAL/SHM, backups, tokens, senha ou hash de senha. O banco local atual não será transferido automaticamente pelo Git.
+## 2. Configurar o Render Free, quando autorizar o deploy
 
-O `render.yaml` pressupõe que o projeto está na **raiz do repositório Git**, como neste checkout. Se colocá-lo em uma subpasta de um monorepo, configure Root Directory e a localização do Blueprint de forma consistente; não use `/workspace/brazi-dashboard` como diretório no Render.
-
-Não aplique o Blueprint apenas para “ver a configuração”: aplicá-lo pode criar recursos cobrados e iniciar o primeiro deploy. `autoDeploy: false` evita deploys automáticos posteriores por novos commits, mas não transforma a criação do Blueprint em uma simulação.
-
-## Configuração do serviço
+O `render.yaml` deve ficar na raiz do repositório. Aplicar um Blueprint pode iniciar o primeiro deploy; `autoDeploy: false` desativa deploys posteriores por commits, não a primeira implantação. Não aplique apenas para simular.
 
 | Campo | Valor |
 | --- | --- |
-| Tipo | Web Service, runtime Node |
-| Plano | Starter ou outro plano pago compatível com disco |
-| Instâncias | 1 |
-| Node | 24.x, definido por NODE_VERSION e .node-version |
+| Tipo / plano | Web Service Node / **Free** |
+| Instâncias | Uma |
 | Build | `npm ci --include=dev && npm run build && npm prune --omit=dev` |
 | Start | `npm start` |
+| Node | 24.x |
 | Health check | `/health` |
-| Disco | `brazi-data`, mount path `/var/data`, inicialmente 1 GB |
-| SQLite | `/var/data/brazi/brazi.sqlite` |
+| Disco | Nenhum |
 
-Não fixe `PORT`: o Render fornece a variável. Em produção o Fastify escuta em `0.0.0.0` nessa porta. O React compilado é servido pelo próprio Fastify; não há servidor Vite em produção e não é necessário criar Static Site separado.
+O React compilado é servido pelo próprio Fastify, sem Vite em produção. `PORT` vem do Render; o backend usa `0.0.0.0`. Não é necessário criar Static Site separado nem configurar CORS entre serviços. O build não abre o PostgreSQL. Não é necessário pre-deploy command, que pode ter restrições no plano Free: as migrações rodam no startup, antes de abrir a porta.
 
-O build instala dependências de desenvolvimento explicitamente para compilar TypeScript/Vite e as remove depois. O runtime não depende de tsx ou Vite. Não há instalação de SQLite externo: usamos o incluído no Node 24.
+Configure no painel **Environment** do Render:
 
-O disco só é usado em runtime. O build não abre nem inicializa o banco. Não rode limpeza, sincronização ou migração dependente do disco em um pre-deploy command: a montagem do disco não está disponível nessa fase.
-
-## Variáveis e segredos
-
-Cadastre diretamente no painel de Environment do Render, nunca em arquivos versionados:
-
-| Variável | Configuração |
+| Variável | Valor / origem |
 | --- | --- |
-| `NODE_ENV` | `production` (Blueprint) |
-| `DATABASE_PATH` | `/var/data/brazi/brazi.sqlite` (Blueprint) |
-| `AUTH_ENABLED` | `true` (Blueprint; não pode ser desabilitada em produção) |
-| `AUTH_USERNAME` | Nome administrativo escolhido, exigido no painel |
-| `AUTH_PASSWORD_HASH` | Hash gerado pelo comando abaixo, exigido no painel |
-| `RESERVA_INK_TOKEN` | Token INK com store.orders.read, store.products.read e store.refunds.read |
-| `BUSINESS_TIMEZONE` | `America/Sao_Paulo` (Blueprint) |
-| `APP_ORIGIN` | Opcional no domínio padrão; para domínio próprio, origem HTTPS exata |
-| `DISPLAY_CURRENCY` | Opcional; configure BRL somente após confirmar moeda/unidade da API |
+| `DATABASE_URL` | URL privada do pooler Supabase com TLS; obrigatória |
+| `DATABASE_POOL_MAX` | `3` no Blueprint; reduza para `1` se necessário |
+| `NODE_ENV` | `production` |
+| `AUTH_ENABLED` | `true`; produção recusa desabilitar |
+| `AUTH_USERNAME` | Usuário administrativo privado |
+| `AUTH_PASSWORD_HASH` | Hash gerado pelo comando abaixo |
+| `RESERVA_INK_TOKEN` | Token com store.orders.read, store.products.read e store.refunds.read |
+| `BUSINESS_TIMEZONE` | `America/Sao_Paulo` |
+| `API_PAUSE_MS` | `1800`, mínimo 1500 |
+| `SYNC_MAX_PAGES` | `1000` |
+| `APP_ORIGIN` | Opcional no domínio padrão; origem HTTPS exata para domínio próprio |
+| `DATABASE_CA_CERT` | Opcional, CA oficial em PEM se necessária |
+| `DISPLAY_CURRENCY` | Opcional; apenas após confirmar moeda/unidade da INK |
 
-`sync: false` no Blueprint significa que o valor será informado fora do YAML; não é uma credencial fictícia nem um valor já configurado. O token precisa estar no processo do backend no Render. Um GitHub Actions Secret ou segredo existente neste ambiente de desenvolvimento não é copiado automaticamente para o Render.
+`DATABASE_SCHEMA` é opcional, padrão `brazi`. Alterá-lo aponta para outro conjunto de tabelas, não renomeia nem migra dados existentes. Em produção, arquivos `.env` não são carregados: DATABASE_URL e demais credenciais vêm exclusivamente do ambiente do processo. Arquivos `.env` são aceitos apenas no desenvolvimento/testes. Não configure `DATABASE_PATH`: não há SQLite no runtime. Segredos com `sync: false` serão informados fora do YAML. Segredos de GitHub Actions ou deste ambiente não são copiados automaticamente para o Render.
 
-`RENDER_EXTERNAL_URL`, fornecida pelo Render, é usada como origem padrão. Exemplo de formato: `https://nome-do-servico.onrender.com`. Não inclui caminho, query ou fragmento. Se usar domínio próprio, configure-o no Render, espere a emissão do certificado e depois defina `APP_ORIGIN` para `https://seu-dominio`. Use essa mesma origem ao entrar; requisições de alteração vindas de outra origem serão rejeitadas.
+A origem vem de `APP_ORIGIN` ou `RENDER_EXTERNAL_URL`, fornecida pelo Render. Domínio próprio deve ser configurado com certificado HTTPS válido antes de usá-lo como origem. O Node confia somente no proxy imediato do Render. Não exponha sua porta diretamente nem aceite cabeçalhos de outro proxy não confiável.
 
-### Gerar o hash de senha
+## 3. Criar a credencial de login
 
-Em um terminal confiável com o projeto e Node 24 — pode ser um terminal de desenvolvimento na nuvem, sem instalar nada no seu computador:
+Em terminal confiável com Node 24 e o projeto:
 
 ```sh
 npm ci
@@ -68,50 +64,64 @@ npm run build
 npm run auth:password
 ```
 
-O comando solicita e confirma a senha com entrada oculta, sem aceitá-la em argumentos, ambiente ou arquivos. Use de 12 a 256 caracteres e prefira uma senha longa, única, gerada por gerenciador de senhas. Copie **somente o hash produzido** para `AUTH_PASSWORD_HASH` no painel do Render. Preserve todos os caracteres `$`. Não cole a senha nem o hash no chat, no GitHub ou em comandos que ficarão no histórico do shell.
+Informe uma senha longa e única (12–256 caracteres), com confirmação e entrada oculta. Copie somente o hash produzido para `AUTH_PASSWORD_HASH` no ambiente do Render; preserve os caracteres `$`. Não salve senha ou hash no repositório, chat ou histórico de comandos.
 
-O hash usa scrypt com salt aleatório, N=65536, r=8, p=2, chave de 64 bytes. Há limite de duas derivações simultâneas para conter uso de memória. Senhas em texto puro não são guardadas no banco ou no navegador. O hash também é uma credencial sensível e não deve ser versionado.
+São preservados scrypt com salt aleatório, limite de duas derivações simultâneas, sessões opacas de oito horas e armazenamento somente do SHA-256 do token. Cookies de produção usam `__Host-`, Secure, HttpOnly, SameSite=Strict, Path=/ e nenhum Domain. Logout e expiração revogam o acesso; trocar usuário/hash invalida sessões anteriores. As sessões sobrevivem a reinícios/deploys se PostgreSQL, origem e credenciais forem mantidos.
 
-## Login e sessões
+Login tem limite persistente de dez tentativas por IP derivado e 60 globais por 15 minutos, consumido em transação para evitar corridas. Login, logout e sincronização exigem JSON, cabeçalho de segurança e origem exata. Todas as APIs comerciais exigem autenticação; `/health` público retorna apenas estado mínimo. Não há senha no navegador após login, localStorage, cadastro público, MFA ou recuperação automática de senha.
 
-A primeira página pública apresenta somente o formulário de login e os arquivos estáticos. Indicadores, status da carga e sincronização exigem sessão autenticada. `/health` é público e devolve apenas `{status:"ok"}` para o health check do Render. `/api/auth/session` é público e retorna somente o estado de autenticação; não retorna dados comerciais para visitantes.
+## 4. Migrações e primeira carga
 
-Uma única conta administrativa pode consultar e sincronizar. Esta versão não implementa cadastro público, papéis, MFA, recuperação de senha por e-mail ou SSO. A recuperação é administrativa: gere outro hash e altere a variável no Render, aplicando a nova versão do serviço.
+A migração `src/storage/migrations/001-initial.ts` cria schema, tabelas JSONB normalizadas, índices, sessões e controle de execuções/tentativas. O registro `schema_migrations` impede reaplicação. Um bloqueio transacional coordena startups concorrentes; DDL e registro da versão são atômicos. Banco com versão desconhecida mais recente é recusado. Não há downgrade automático.
 
-As sessões são opacas, aleatórias, com duração absoluta de oito horas. O SQLite guarda apenas o SHA-256 do token, nunca o cookie em texto puro. Em produção o cookie tem prefixo `__Host-`, `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/` e nenhum Domain. Não há token em localStorage. Logout revoga a sessão no servidor; expiração ou alteração de usuário/hash também revoga o acesso. Sessões válidas sobrevivem a reinícios/deploys se o disco, a origem e as credenciais forem mantidos.
+O servidor aplica migrações antes de atender requisições. Também é possível executá-las em uma máquina confiável:
 
-Há limite persistente de dez tentativas de login por IP e 60 globais por janela de 15 minutos, incluindo tentativas bem-sucedidas. A resposta 429 informa Retry-After. O servidor guarda somente uma chave derivada do IP para esse controle; logs HTTP estão desabilitados e não registram credenciais. Em caso de bloqueio legítimo, aguarde a janela; não desabilite a autenticação.
+```sh
+npm run migrate
+# Após build, inclusive sem dependências de desenvolvimento:
+npm run migrate:prod
+```
 
-Login, logout e sincronização exigem JSON, cabeçalho de segurança e origem autorizada. Se a sessão expirar durante o uso, os dados da interface são removidos e o formulário de login reaparece.
+Esses comandos exigem DATABASE_URL; em produção TLS é obrigatório. Não há retry infinito no startup. Banco pausado, CA inválida, credencial incorreta ou rede bloqueada fazem o processo falhar com mensagem sem segredos. Retome/corrija o banco e reinicie o serviço.
 
-## HTTPS
+Para um banco novo, faça login e clique **Atualizar dados**. A carga lê a API integralmente, respeitando paginação, pausas e HTTP 429. Grava lotes de até 500 registros dentro de uma única transação; UPSERT não duplica IDs. Leituras do dashboard usam uma transação de snapshot consistente para combinar versão, pedidos, produtos e reembolsos. Cache é invalidado pela versão da última carga concluída. Regras financeiras e cálculos exatos em centavos permanecem no módulo de domínio.
 
-O Render fornece terminação TLS e certificado para o domínio padrão, e certificados gerenciados para domínios próprios configurados corretamente. O Node recebe HTTP atrás desse proxy; não se deve instalar certificado privado na aplicação.
+O pool Node tem no máximo três conexões por processo, timeout de conexão de dez segundos e conexões ociosas liberadas após dez segundos. Queries em transações têm limite de 30 segundos por instrução; o cliente também limita a espera. Não há transação nem conexão reservada durante toda a coleta da API. As concessões são persistidas e recebem heartbeat; após dois minutos sem heartbeat podem ser substituídas por outra carga. A publicação verifica a propriedade da concessão. Sessões e limite de tentativas também ficam no PostgreSQL, não na memória do Render.
 
-Em produção o Fastify reconhece o proxy imediato, exige protocolo HTTPS informado pelo proxy e emite HSTS. GET/HEAD em HTTP são redirecionados para a origem HTTPS configurada. Requisições de alteração em HTTP são recusadas, sem emitir sessão. `/health` é a exceção mínima para sondagens internas e não revela dados.
+## 5. Importar o SQLite anterior (opcional e privado)
 
-Não coloque outro proxy não confiável antes do Node nem exponha a porta diretamente fora da arquitetura do Render. O reconhecimento de proxy e dos cabeçalhos HTTPS pressupõe o ingresso do Render. Testes locais simulam esses cabeçalhos; não substituem a verificação do certificado no domínio real após um deploy autorizado.
+Não copie o arquivo para Git ou imagem do Render. A aplicação nova não modifica nem apaga o SQLite antigo. Para preservar pedidos históricos ausentes da API, use a ferramenta local de transição antes da primeira sincronização no destino:
 
-## Primeira carga e persistência
+1. Pare a aplicação antiga e faça backup consistente privado do SQLite (incluindo WAL/SHM quando aplicável). Trabalhe em uma máquina confiável com acesso à cópia e ao PostgreSQL.
+2. Configure `.env` privado com DATABASE_URL do destino e `SQLITE_IMPORT_PATH` apontando para a cópia. Use as demais variáveis exigidas de autenticação se NODE_ENV=production.
+3. Execute `npm run import:sqlite`. O destino comercial deve estar vazio, sem carga concluída. Não execute a nova sincronização antes da importação.
+4. A ferramenta abre a origem somente para leitura, valida os modelos normalizados estritamente, importa pedidos/produtos/reembolsos/fuso em uma transação e rejeita campos extras. Não importa sessões, tentativas ou credenciais: faça novo login.
+5. Confira privadamente os indicadores e conserve o backup. Uma segunda importação em destino preenchido é recusada. Depois, sincronize normalmente para atualizar o estado da INK.
 
-O primeiro serviço Render terá banco vazio. Após autenticar, clique em Atualizar dados para buscar o histórico da INK. Não embuta o banco de desenvolvimento na imagem/repositório. Para transferir um banco existente em vez de sincronizar novamente, use backup SQLite consistente e transferência privada, com o serviço parado; não copie apenas o arquivo principal enquanto existir WAL ativo.
+O comando requer as dependências de desenvolvimento (tsx); rode na máquina confiável, não no Shell do serviço Free. Uma nova sincronização sem importar também é possível, mas não recupera registros históricos que já não existem na API. **Nenhuma base real foi transferida nesta adaptação.**
 
-Banco, WAL, SHM, sessões e controle de tentativas ficam dentro do mesmo disco `/var/data`. Reinícios e deploys reutilizam esse caminho. O aplicativo recusa iniciar em produção com caminho relativo e, ao detectar RENDER=true, exige `/var/data` existente e arquivo dentro dele; não faz fallback silencioso para armazenamento efêmero.
+## 6. Limitações dos planos gratuitos
 
-Não exclua/recrie o disco ou altere DATABASE_PATH sem um plano de migração. A região do serviço e do disco deve ser a mesma. Uma instância com disco persistente não oferece o mesmo mecanismo de deploy sem interrupção de um serviço sem disco; planeje uma breve indisponibilidade. Uma carga interrompida mantém a última versão concluída e poderá ser refeita.
+- **Render Free:** há suspensão por inatividade (a regra usual é cerca de 15 minutos sem tráfego recebido) e partida a frio, que pode levar um minuto ou mais. Horas gratuitas são compartilhadas pelos serviços do workspace; exceder cotas pode suspender o serviço. Não há disco persistente, garantia de execução contínua, Shell ou job dedicado pressuposto por este projeto.
+- **Sincronização:** é um trabalho no processo web, não uma fila durável com checkpoint. Mantenha o dashboard aberto para acompanhar, mas isso não garante conclusão. Suspensão, redeploy ou reinício podem interromper a coleta. A última carga concluída fica intacta no Supabase; depois de expirar a concessão, execute novamente desde o início. Não foram adicionados pings artificiais para impedir suspensão.
+- **Supabase Free:** projetos podem ser pausados por baixa atividade (a referência usual é uma semana). Pode ser necessário restaurar/retomar no painel antes de o backend conectar. O plano tem limites de banco, tráfego e conexões; a referência usual de banco é 500 MB por projeto, mas confira o painel e termos atuais. Não presuma disponibilidade contínua ou backup/PITR incluído.
+- **Conexões:** o pool local pequeno não elimina o limite global do Supabase; cada processo ou ferramenta adiciona conexões. Prefira uma instância, feche ferramentas ociosas e reduza DATABASE_POOL_MAX se necessário. Use pooler IPv4 quando conexão direta IPv6 não funcionar. Endereços e certificados devem ser os fornecidos pelo painel, nunca presumidos.
+- **Crescimento:** JSONB guarda somente dados comerciais normalizados. Runs/tentativas/sessões também consomem espaço; sessões e tentativas vencidas são limpas durante login. Monitore tamanho, tráfego e histórico de execuções. Crescimento sem limite exigirá retenção administrativa ou plano maior; não há rotina automática de apagar pedidos.
+- **Backup:** faça exportações PostgreSQL privadas e teste restauração. Persistir fora do Render não protege de exclusão do projeto, erro operacional ou indisponibilidade do provedor. Não presuma que o plano Free inclui recuperação pontual.
 
-SQLite exige uma única instância nesta arquitetura. Não ative autoscaling nem um segundo Web Service escrevendo no mesmo arquivo. Para escalar horizontalmente, será necessária outra arquitetura de armazenamento/coordenação.
+Esses limites podem mudar. Consulte as fontes atuais antes de ativar: [Render Free](https://render.com/docs/free), [Blueprint](https://render.com/docs/blueprint-spec), [Supabase Pricing](https://supabase.com/pricing), [Conexões e pooler](https://supabase.com/docs/guides/database/connecting-to-postgres), [SSL](https://supabase.com/docs/guides/platform/ssl-enforcement), [Backups](https://supabase.com/docs/guides/platform/backups).
 
-Faça backups consistentes e teste a restauração. Persistência entre deploys não protege contra exclusão do disco ou erro operacional. Guarde backups e qualquer cópia do banco como dados comerciais privados; os backups também contêm metadados de autenticação. Consulte as opções atuais de snapshots/backup do disco no Render, sem presumir que qualquer cópia de arquivo isolado com WAL ativo é consistente.
+## 7. Testar sem dados reais
 
-## Verificação após um deploy futuro autorizado
+Use PostgreSQL local com banco exclusivo cujo nome termine em `_test`. Configure TEST_DATABASE_URL no `.env` ou ambiente; os testes recusam host remoto ou nome sem esse sufixo. Nunca aponte para o projeto comercial. Para PostgreSQL local sem TLS, use host loopback e `sslmode=disable`, somente fora de produção.
 
-1. Acesse a URL HTTPS e confira certificado válido e formulário de login, sem indicadores públicos.
-2. Confira que `/health` responde sem detalhes de dados e que `/api/status` sem login retorna 401.
-3. Faça login e confira o cookie Secure/HttpOnly/SameSite=Strict no navegador.
-4. Sincronize, confira última carga e indicadores, depois faça logout e confirme que os endpoints voltam a exigir login.
-5. Após um deploy/restart autorizado, confirme a mesma cobertura no banco e a preservação da última carga.
+```sh
+npm ci
+npm test
+npm run build
+npm run test:e2e
+```
 
-Para sincronizar pelo Shell do Render, use `npm run sync:prod`, que executa o JavaScript compilado. `npm run sync` usa tsx e é destinado ao desenvolvimento, pois as dependências de desenvolvimento são removidas em produção.
+Cada teste cria/remove seu schema isolado. E2E requer Chromium e usa token INK desabilitado, credencial aleatória e dados fictícios. O build não exige banco nem credenciais. A execução dos testes de integração exige banco real disponível; não são substituídos por mocks de SQL ou ignorados silenciosamente.
 
-Nenhuma dessas etapas foi executada no Render durante a preparação. Os testes locais cobrem portas, cookies, sessões, bloqueio de HTTP/CSRF, persistência e o build sem dependências de desenvolvimento.
+Após um futuro deploy autorizado, confira certificado HTTPS, bloqueio 401 sem login, login/logout, cookies seguros, migrações, sincronização e persistência após restart. Conectividade específica do Supabase, aceitação do Blueprint e comportamento de suspensão precisam de validação no serviço real; os testes locais não os comprovam.
