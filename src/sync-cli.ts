@@ -1,10 +1,11 @@
+import {assertInkAllowed} from './staging-guard.js';
 import {settings} from './settings.js';
 import {configureProxy} from './integration/transport.js';
 import {Store} from './storage/store.js';
 import {SyncService} from './integration/sync.js';
 let store:Store|undefined,sync:SyncService|undefined;
 try{
- const config=settings();configureProxy();process.umask(0o077);
+ assertInkAllowed();const config=settings();configureProxy();process.umask(0o077);
  store=await Store.open(config.DATABASE_URL,{schema:config.DATABASE_SCHEMA,production:config.production,max:config.DATABASE_POOL_MAX,ca:config.DATABASE_CA_CERT});
  sync=new SyncService(store,config.RESERVA_INK_TOKEN,config.BUSINESS_TIMEZONE,config.API_PAUSE_MS,config.SYNC_MAX_PAGES);
  const started=await sync.start();

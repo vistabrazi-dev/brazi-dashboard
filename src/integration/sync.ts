@@ -1,3 +1,4 @@
+import {assertInkAllowed} from '../staging-guard.js';
 import {InkClient,InkError,type Resource} from '../ink.js';
 import {pacedFetch} from './transport.js';
 import {normalizeOrder,normalizeProduct,normalizeRefunds} from '../domain/normalize.js';
@@ -21,6 +22,7 @@ export class SyncService {
  private task?:Promise<void>;private controller?:AbortController;
  constructor(private store:Store,private token:string|undefined,private timezone:string,private pauseMs=1800,private maxPages=1000){}
  async start():Promise<{accepted:boolean;id?:number;reason?:string}>{
+  try{assertInkAllowed();}catch{return {accepted:false,reason:'Sincronização INK bloqueada por política do ambiente.'};}
   if(!this.token)return {accepted:false,reason:'Configure RESERVA_INK_TOKEN no backend.'};
   const run=await this.store.acquire();if(run===null)return {accepted:false,reason:'Já existe uma sincronização em andamento.'};
   this.controller=new AbortController();this.task=this.execute(run,this.controller.signal).catch(()=>{console.error('Sincronização interrompida por indisponibilidade do banco. Última carga preservada.');});return {accepted:true,id:run};

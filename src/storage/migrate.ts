@@ -2,10 +2,11 @@ import type {Pool,PoolClient} from 'pg';
 import {StartupFailure} from '../startup-diagnostics.js';
 import {initialMigration} from './migrations/001-initial.js';
 export function schemaName(name:string){if(!/^[a-z][a-z0-9_]{0,62}$/.test(name)||name.startsWith('pg_')||['public','auth','storage','extensions','information_schema','graphql','graphql_public','realtime','supabase_functions','vault'].includes(name))throw new Error('Schema inválido.');return `"${name}"`;}
-export async function migrate(pool:Pool,schema='brazi'){
+export async function migrate(pool:Pool,schema='brazi',before?:(client:PoolClient)=>Promise<void>){
  const name=schemaName(schema);let client:PoolClient;
  try{client=await pool.connect();}catch(error){throw new StartupFailure('database-connect',error);}
  try{
+  if(before)await before(client);
   await client.query('BEGIN');
   await client.query("SET LOCAL statement_timeout = '30s'");
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[schema+':migration']);

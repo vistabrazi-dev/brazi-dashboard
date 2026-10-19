@@ -36,3 +36,8 @@ secrets/
 *.backup
 .pgpass
 .pg_service.conf
+
+# Artefatos e políticas privados do staging
+*.brazi-snapshot
+*.staging-key
+*.staging-policy.json

@@ -19,7 +19,9 @@
     "sync:prod": "node dist/sync-cli.js",
     "migrate": "tsx src/migrate-cli.ts",
     "migrate:prod": "node dist/migrate-cli.js",
-    "import:sqlite": "tsx src/import-sqlite-cli.ts"
+    "import:sqlite": "tsx src/import-sqlite-cli.ts",
+    "staging": "tsx src/staging-cli.ts",
+    "staging:prod": "node dist/staging-cli.js"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",

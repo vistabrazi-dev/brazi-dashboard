@@ -1,3 +1,4 @@
+import {assertInkAllowed} from './staging-guard.js';
 import { z } from 'zod';
 export class InkError extends Error {}
 export const paymentStatuses = ['pending','paid','succeeded','waiting_payment','awaiting_analysis','free','refund_requested','refunded','canceled','failed','expired','not_authorized','dispute','chargeback'] as const;
@@ -12,6 +13,7 @@ export type Resource = keyof typeof schemas;
 export class InkClient {
   constructor(private token:string, private fetcher:typeof fetch = fetch) {}
   async page(resource:Resource, page=1, perPage=100) {
+    assertInkAllowed();
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(perPage) || perPage < 1 || perPage > 100) throw new InkError('Paginação inválida.');
     const url = new URL(`/v1/stores/${resource}`, 'https://api.reserva.ink');
     url.searchParams.set('page',String(page)); url.searchParams.set('per_page',String(perPage));

@@ -1,3 +1,4 @@
+import {stagingMode} from './staging-guard.js';
 import {config as loadEnvironment} from 'dotenv';
 // Em produção, credenciais vêm exclusivamente do ambiente do processo.
 if(process.env.NODE_ENV!=='production')loadEnvironment();
@@ -27,7 +28,7 @@ const schema=z.object({
  RENDER:z.string().optional(),
 });
 export function settings(environment:NodeJS.ProcessEnv=process.env){
- const clean={...environment};for(const key of ['RESERVA_INK_TOKEN','DISPLAY_CURRENCY','AUTH_USERNAME','AUTH_PASSWORD_HASH','APP_ORIGIN','RENDER_EXTERNAL_URL','AUTH_ENABLED'])if(!clean[key])delete clean[key];
+ stagingMode(environment);const clean={...environment};for(const key of ['RESERVA_INK_TOKEN','DISPLAY_CURRENCY','AUTH_USERNAME','AUTH_PASSWORD_HASH','APP_ORIGIN','RENDER_EXTERNAL_URL','AUTH_ENABLED'])if(!clean[key])delete clean[key];
  const result=schema.safeParse(clean);if(!result.success){const fields=[...new Set(result.error.issues.map(issue=>issue.path[0]).filter((key):key is string=>typeof key==='string'&&Object.hasOwn(schema.shape,key)))];throw new ConfigurationError('Variáveis ausentes ou inválidas: '+fields.join(', ')+'.');}
  const config=result.data,production=config.NODE_ENV==='production';
  const enabled=config.AUTH_ENABLED===undefined?production:config.AUTH_ENABLED==='true';

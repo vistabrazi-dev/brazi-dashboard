@@ -1,3 +1,5 @@
+import {stagingMode} from '../staging-guard.js';
+import {preflight,verifyIdentity} from '../staging/preflight.js';
 import type {Pool,PoolClient} from 'pg';
 import type {Order,Product,RefundHistory,Snapshot} from '../domain/models.js';
 import {databasePool,type DatabaseOptions} from './connection.js';
@@ -6,8 +8,10 @@ export interface Run {id:number;status:string;stage:string;page:number;pages:num
 export class Store {
  private constructor(readonly db:Pool,readonly schema:string){}
  static async open(url:string,options:DatabaseOptions&{schema?:string}={}){
-  const schema=options.schema??'brazi';schemaName(schema);const pool=databasePool(url,options);
-  try{await migrate(pool,schema);return new Store(pool,schema);}catch(error){await pool.end();throw error;}
+  const schema=options.schema??'brazi';schemaName(schema);
+  const policy=stagingMode()?await preflight(url,schema,options):undefined;
+  const pool=databasePool(url,options);
+  try{await migrate(pool,schema,policy?c=>verifyIdentity(c,policy):undefined);return new Store(pool,schema);}catch(error){await pool.end();throw error;}
  }
  private table(name:string){return `${schemaName(this.schema)}.${name}`;}
  private lock(client:PoolClient,kind:string){return client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[this.schema+':'+kind]);}

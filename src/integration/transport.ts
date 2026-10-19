@@ -1,3 +1,4 @@
+import {assertInkAllowed} from '../staging-guard.js';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {EnvHttpProxyAgent,setGlobalDispatcher} from 'undici';
 export function configureProxy(){if(process.env.HTTPS_PROXY||process.env.HTTP_PROXY||process.env.https_proxy||process.env.http_proxy)setGlobalDispatcher(new EnvHttpProxyAgent());}
@@ -6,8 +7,11 @@ export function pacedFetch(options:TransportOptions={}):typeof fetch {
  const wait=options.wait??(async(ms,signal)=>{await sleep(ms,undefined,{signal});});
  const fetcher=options.fetcher??fetch;
  return (async(input:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+  assertInkAllowed();
   for(let attempt=0;attempt<6;attempt++){
+   assertInkAllowed();
    await wait(options.pauseMs??1800,options.signal);
+   assertInkAllowed();
    const signals=[AbortSignal.timeout(30000),...(options.signal?[options.signal]:[])];
    let response:Response;
    try{response=await fetcher(input,{...init,signal:AbortSignal.any(signals),redirect:'error'});}
