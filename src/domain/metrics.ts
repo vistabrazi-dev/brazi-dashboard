@@ -1,4 +1,5 @@
-import {allocate,sum} from './money.js';
+import {sum} from './money.js';
+import {attributeItems,productCatalog} from './product-attribution.js';
 import {classify} from './rules.js';
 import {reasonLabels,type Order,type Product,type RefundHistory,type Category} from './models.js';
 export const dateValid=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&Number.isFinite(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
@@ -28,22 +29,13 @@ export function dashboard(allOrders:Order[],products:Product[],histories:RefundH
  const daily=Array.from({length:period.days},(_,index)=>{const date=shift(start,index),previousDate=shift(period.previousStart,index);return {date,previousDate,revenueCents:dailyMap.get(date)?.revenueCents??0,orders:dailyMap.get(date)?.orders??0,previousRevenueCents:dailyMap.get(previousDate)?.revenueCents??0};});
  const monthlyMap=new Map<string,{month:string;revenueCents:number;orders:number}>();
  for(const day of daily){const month=day.date.slice(0,7),slot=monthlyMap.get(month)??{month,revenueCents:0,orders:0};slot.revenueCents=sum([slot.revenueCents,day.revenueCents]);slot.orders+=day.orders;monthlyMap.set(month,slot);}
- const skuMap=new Map<string,Set<number>>();const names=new Map(products.map(p=>[p.id,p.name]));
- for(const product of products)for(const variant of product.variants){if(variant.sku){const ids=skuMap.get(variant.sku)??new Set<number>();ids.add(product.id);skuMap.set(variant.sku,ids);}}
- const variantMap=new Map<number,number>();for(const product of products)for(const variant of product.variants)variantMap.set(variant.id,product.id);
+ const catalog=productCatalog(products);
  const rankingMap=new Map<string,{key:string;name:string;revenueCents:number;quantity:number;orders:Set<number>;unmapped:boolean}>();
  for(const{order,category}of current){if(category!=='confirmed')continue;
-  const discounts=allocate(sum([order.promotion!,order.paymentDiscount!]),order.items.map(i=>i.total!));
-  order.items.forEach((item,index)=>{
-   const ids=skuMap.get(item.sku),bySku=ids?.size===1?[...ids][0]:undefined;
-   const direct=item.sourceProductId!==undefined&&names.has(item.sourceProductId)?item.sourceProductId:undefined;
-   const variant=item.sourceVariantId===undefined?undefined:variantMap.get(item.sourceVariantId);
-   const conflicting=item.sourceProductId!==undefined&&variant!==undefined&&item.sourceProductId!==variant;
-   const productId=conflicting?undefined:direct??(item.sourceProductId===undefined?(variant??bySku):undefined);
-   const key=productId===undefined?'unmapped':String(productId);
-   const row=rankingMap.get(key)??{key,name:productId===undefined?'Não associado ao catálogo':names.get(productId)!,revenueCents:0,quantity:0,orders:new Set<number>(),unmapped:productId===undefined};
-   row.revenueCents=sum([row.revenueCents,item.total!-(discounts[index]??0)]);row.quantity+=item.quantity-item.free;row.orders.add(order.id);rankingMap.set(key,row);
-  });
+  for(const item of attributeItems(order,catalog)){
+   const row=rankingMap.get(item.key)??{key:item.key,name:item.name,revenueCents:0,quantity:0,orders:new Set<number>(),unmapped:item.unmapped};
+   row.revenueCents=sum([row.revenueCents,item.revenueCents]);row.quantity+=item.quantity;row.orders.add(order.id);rankingMap.set(item.key,row);
+  }
  }
  const ranking=[...rankingMap.values()].map(r=>({...r,orders:r.orders.size})).sort((a,b)=>b.revenueCents-a.revenueCents||a.name.localeCompare(b.name));
  const categories:Record<Category,{count:number;valueCents:number}>={confirmed:{count:0,valueCents:0},exchange:{count:0,valueCents:0},refund:{count:0,valueCents:0},refund_pending:{count:0,valueCents:0},reconciliation:{count:0,valueCents:0},unpaid:{count:0,valueCents:0},complimentary:{count:0,valueCents:0}};

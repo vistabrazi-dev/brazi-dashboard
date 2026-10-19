@@ -6,13 +6,15 @@ import {z} from 'zod';
 import {Store} from './storage/store.js';
 import {SyncService} from './integration/sync.js';
 import {installAuth,type AuthOptions} from './auth/auth.js';
+import {installProductRoutes,AnalyticsBusyError} from './product-routes.js';
 import {dashboard,range} from './domain/metrics.js';
 export function dashboardApp(store:Store,sync:SyncService,options:{timezone:string;currency?:string;tokenConfigured:boolean;staticRoot?:string;auth?:AuthOptions}){
  const auth=options.auth??{enabled:false,production:false};
  const app=Fastify({logger:false,bodyLimit:4096,trustProxy:auth.production?((_address:string,hop:number)=>hop===0):false});
  installAuth(app,store,auth);const cache=new Map<string,ReturnType<typeof dashboard>>();
  app.addHook('onSend',async(request,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer').header('X-Frame-Options','DENY');reply.header('Cache-Control',/^\/assets\/[A-Za-z0-9_-]+\.(js|css|woff2|svg|png)(\?|$)/.test(request.url)?'public, max-age=31536000, immutable':'no-store');if(auth.production&&request.protocol==='https')reply.header('Strict-Transport-Security','max-age=31536000');if(!request.url.startsWith('/api/')) reply.header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'");return payload;});
- app.setErrorHandler((_error,_request,reply)=>reply.code(500).send({error:'Não foi possível concluir a operação.'}));
+ app.setErrorHandler((error,_request,reply)=>error instanceof AnalyticsBusyError?reply.code(503).header('Retry-After','3').send({error:'Há outras análises em preparação. Aguarde e tente novamente.'}):reply.code(500).send({error:'Não foi possível concluir a operação.'}));
+ installProductRoutes(app,store,options);
  app.get('/health',async()=>({status:'ok'}));
  app.get('/api/status',async()=>{const state=await store.status();return {...state,tokenConfigured:options.tokenConfigured,timezone:state.timezone??options.timezone,currency:options.currency??null};});
  app.get('/api/dashboard',async(request,reply)=>{

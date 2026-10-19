@@ -1,0 +1,44 @@
+{
+  "environment": "PostgreSQL local, dados sintéticos, sem deploy",
+  "aggregationSamples": 5,
+  "cachedHttpSamples": 10,
+  "results": [
+    {
+      "orders": 5000,
+      "items": 20000,
+      "aggregationP95Ms": 73,
+      "firstHttpMs": 155,
+      "cachedHttpP95Ms": 5,
+      "selectedBasketP95Ms": 7,
+      "responseBytes": 3867,
+      "processPeakRssMiB": 165,
+      "candidateProducts": 100,
+      "pairOccurrencesCoveredPct": 71.9
+    },
+    {
+      "orders": 20000,
+      "items": 80000,
+      "aggregationP95Ms": 244,
+      "firstHttpMs": 377,
+      "cachedHttpP95Ms": 10,
+      "selectedBasketP95Ms": 14,
+      "responseBytes": 3881,
+      "processPeakRssMiB": 266,
+      "candidateProducts": 100,
+      "pairOccurrencesCoveredPct": 71.8
+    },
+    {
+      "orders": 50000,
+      "items": 200000,
+      "aggregationP95Ms": 507,
+      "firstHttpMs": 813,
+      "cachedHttpP95Ms": 15,
+      "selectedBasketP95Ms": 18,
+      "responseBytes": 3960,
+      "processPeakRssMiB": 334,
+      "candidateProducts": 100,
+      "pairOccurrencesCoveredPct": 71.8
+    }
+  ],
+  "selectedBasketSamples": 5
+}

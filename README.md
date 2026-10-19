@@ -145,3 +145,11 @@ As migrações versionadas rodam transacionalmente na inicialização e também 
 Os planos gratuitos podem suspender por inatividade, limitar conexões, armazenamento, tráfego e horas de execução. Uma sincronização é um trabalho no processo web, sem garantia de conclusão se o Render suspender ou reiniciar. A última carga concluída permanece no PostgreSQL; execute novamente a carga completa após uma interrupção. Não há serviço de jobs ou disponibilidade contínua garantida.
 
 Faça backups privados do PostgreSQL e teste a restauração. Não presuma backup automático ou recuperação pontual no plano gratuito. Nunca versione dumps ou URLs de conexão.
+
+## Fase 2 / E1 — Inteligência de Produtos
+
+Na branch `develop/phase-2`, a seção **Produtos** inclui ranking ordenável por unidades, pedidos e valor atribuído, evolução diária/mensal por produto, combinações de dois produtos e cobertura de catálogo. Busca e paginação são feitas no backend, sem novas chamadas à INK por visualização. O módulo reutiliza a classificação e o rateio do MVP; não requer migração de banco.
+
+O ranking geral de pares considera até 100 produtos com mais unidades vendidas, informando cobertura e exclusões. Selecionar um produto mostra todos os parceiros associados, sem esse limite; a participação sempre usa todos os pedidos confirmados do período. Itens não associados permanecem no ranking e não viram um produto fictício nas cestas.
+
+Consulte o [relatório E1 com critérios, endpoints, testes, limitações e capturas](docs/planning/phase-2-e1-delivery.md). Clientes, estampas, cores e modelagens não fazem parte desta entrega. A implementação está disponível para revisão, sem merge ou deploy em produção.

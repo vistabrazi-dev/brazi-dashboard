@@ -1,4 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
+import {productIntelligence} from '../src/domain/product-intelligence';
+import {productRows,basketRows,productQuery,basketQuery} from '../src/product-routes';
 import {dashboard} from '../src/domain/metrics';
 import type {Order} from '../src/domain/models';
 const order:Order={id:1,day:'2026-10-10',payment:'Pago',status:'delivered',exchange:false,total:10000,shipping:1000,freightDifference:0,promotion:1000,paymentDiscount:0,items:[{sku:'A',quantity:2,free:0,refunded:0,unit:5000,total:10000}],issues:[]};
@@ -12,6 +14,12 @@ async function setup(page:Page,options:{empty?:boolean;failed?:boolean}={}){
   if(url.pathname==='/api/status')return route.fulfill({json:options.empty?{...status,lastSuccess:null,coverage:{first:null,last:null,orders:0}}:posts?{...status,run:{status:'running',stage:'orders',page:1,pages:124,processed:100},version:1}:status});
   if(url.pathname==='/api/sync'){posts++;expect(route.request().headers()['x-brazi-request']).toBe('1');return route.fulfill({status:202,json:{accepted:true,id:2}});}
   if(options.failed)return route.fulfill({status:500,json:{error:'Falha de teste controlada.'}});
+  if(url.pathname.startsWith('/api/intelligence/')){
+   const q={start:url.searchParams.get('start')!,end:url.searchParams.get('end')!};
+   const bi=productIntelligence([order],[{id:1,name:'Camiseta Brazi',variants:[{id:1,sku:'A'}]}],[],q.start,q.end),metadata={snapshotVersion:1,lastSuccess:status.lastSuccess};
+   if(url.pathname.endsWith('/baskets'))return route.fulfill({json:{...metadata,analysis:bi.basketAnalysis,...basketRows(bi,basketQuery.parse(Object.fromEntries(url.searchParams)))}});
+   return route.fulfill({json:{...metadata,coverage:bi.coverage,basketAnalysis:bi.basketAnalysis,...productRows(bi,productQuery.parse(Object.fromEntries(url.searchParams)))}});
+  }
   const data=dashboard([order,{...order,id:2,day:'2026-09-01',total:20000,items:[{...order.items[0]!,unit:10000,total:20000}]},{...order,id:3,exchange:true},{...order,id:4,status:'canceled'}],[{id:1,name:'Camiseta Brazi',variants:[{id:1,sku:'A'}]}],[],url.searchParams.get('start')!,url.searchParams.get('end')!);
   return route.fulfill({json:data});
  });

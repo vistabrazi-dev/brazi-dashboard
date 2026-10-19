@@ -1,0 +1,220 @@
+{
+  "period": {
+    "start": "2026-10-01",
+    "end": "2026-10-03",
+    "days": 3,
+    "previousStart": "2026-09-28",
+    "previousEnd": "2026-09-30"
+  },
+  "current": {
+    "revenueCents": 15000,
+    "orders": 6,
+    "ticketCents": 2500,
+    "units": 14,
+    "merchandiseCents": 14520,
+    "netShippingCents": 480
+  },
+  "previous": {
+    "revenueCents": 2000,
+    "orders": 1,
+    "ticketCents": 2000,
+    "units": 2,
+    "merchandiseCents": 1920,
+    "netShippingCents": 80
+  },
+  "changes": {
+    "revenueCents": 650,
+    "orders": 500,
+    "ticketCents": 25,
+    "units": 600
+  },
+  "daily": [
+    {
+      "date": "2026-10-01",
+      "previousDate": "2026-09-28",
+      "revenueCents": 9000,
+      "orders": 4,
+      "previousRevenueCents": 0
+    },
+    {
+      "date": "2026-10-02",
+      "previousDate": "2026-09-29",
+      "revenueCents": 3000,
+      "orders": 1,
+      "previousRevenueCents": 0
+    },
+    {
+      "date": "2026-10-03",
+      "previousDate": "2026-09-30",
+      "revenueCents": 3000,
+      "orders": 1,
+      "previousRevenueCents": 2000
+    }
+  ],
+  "monthly": [
+    {
+      "month": "2026-10",
+      "revenueCents": 15000,
+      "orders": 6
+    }
+  ],
+  "ranking": [
+    {
+      "key": "1",
+      "name": "Camiseta Horizonte",
+      "revenueCents": 5846,
+      "quantity": 6,
+      "orders": 4,
+      "unmapped": false
+    },
+    {
+      "key": "2",
+      "name": "Camiseta Caminhos",
+      "revenueCents": 3873,
+      "quantity": 4,
+      "orders": 4,
+      "unmapped": false
+    },
+    {
+      "key": "unmapped",
+      "name": "Não associado ao catálogo",
+      "revenueCents": 2853,
+      "quantity": 3,
+      "orders": 3,
+      "unmapped": true
+    },
+    {
+      "key": "3",
+      "name": "Camiseta Origem",
+      "revenueCents": 1948,
+      "quantity": 1,
+      "orders": 2,
+      "unmapped": false
+    }
+  ],
+  "categories": {
+    "confirmed": {
+      "count": 6,
+      "valueCents": 15000
+    },
+    "exchange": {
+      "count": 1,
+      "valueCents": 2000
+    },
+    "refund": {
+      "count": 1,
+      "valueCents": 2000
+    },
+    "refund_pending": {
+      "count": 1,
+      "valueCents": 2000
+    },
+    "reconciliation": {
+      "count": 5,
+      "valueCents": 10000
+    },
+    "unpaid": {
+      "count": 0,
+      "valueCents": 0
+    },
+    "complimentary": {
+      "count": 1,
+      "valueCents": 0
+    }
+  },
+  "reconciliation": {
+    "orders": 6,
+    "reasons": [
+      {
+        "reason": "refund_mismatch",
+        "label": "Quantidades e histórico de reembolso divergentes",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      },
+      {
+        "reason": "paid_canceled",
+        "label": "Pagamento pago com pedido cancelado ou incompatível",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      },
+      {
+        "reason": "canceled_delivered",
+        "label": "Pagamento cancelado com pedido entregue",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      },
+      {
+        "reason": "composition",
+        "label": "Total não corresponde a itens, frete e descontos",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      },
+      {
+        "reason": "missing_source",
+        "label": "Pedido ausente na última leitura integral",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      },
+      {
+        "reason": "unknown_payment",
+        "label": "Status de pagamento não reconhecido",
+        "count": 1,
+        "valueCents": 2000,
+        "unknownAmounts": 0
+      }
+    ]
+  },
+  "refunds": {
+    "approvedCents": 500,
+    "approvedEvents": 1,
+    "pendingCents": 0,
+    "pendingEvents": 0,
+    "unknownAmounts": 0
+  },
+  "logisticsRisk": 1,
+  "statusCounts": [
+    {
+      "payment": "Pago",
+      "order": "delivered",
+      "count": 9
+    },
+    {
+      "payment": "Reembolsado",
+      "order": "delivered",
+      "count": 1
+    },
+    {
+      "payment": "Reembolso solicitado",
+      "order": "delivered",
+      "count": 1
+    },
+    {
+      "payment": "Pago",
+      "order": "canceled",
+      "count": 1
+    },
+    {
+      "payment": "Cancelado",
+      "order": "delivered",
+      "count": 1
+    },
+    {
+      "payment": "Novo estado",
+      "order": "delivered",
+      "count": 1
+    },
+    {
+      "payment": "Pago",
+      "order": "returned",
+      "count": 1
+    }
+  ],
+  "sourceOrders": 15,
+  "unmappedProducts": 3,
+  "definitiveNetRevenue": false
+}
